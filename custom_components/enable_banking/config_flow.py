@@ -13,6 +13,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.helpers import aiohttp_client, selector
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
+from . import async_ensure_callback_registered
 from .api import (
     EnableBankingApi,
     EnableBankingAuthError,
@@ -47,6 +48,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._banks: list[str] = []
         self._state: str | None = None
         self._session: dict[str, Any] | None = None
+        self._authorization_error: str | None = None
         self._reauth_entry: ConfigEntry | None = None
 
     def _callback_url(self) -> str:
@@ -69,6 +71,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Collect and validate Enable Banking application credentials."""
+        async_ensure_callback_registered(self.hass)
         errors: dict[str, str] = {}
         try:
             callback_url = self._callback_url()
@@ -166,20 +169,20 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             state = str(user_input.get("state", ""))
             if self._state is None or not hmac.compare_digest(self._state, state):
-                return self.async_abort(reason="invalid_state")
+                return self._async_external_error("invalid_state")
             if user_input.get("error"):
-                return self.async_abort(reason="access_denied")
+                return self._async_external_error("access_denied")
             code = user_input.get("code")
             if not isinstance(code, str) or not code:
-                return self.async_abort(reason="missing_code")
+                return self._async_external_error("missing_code")
             try:
                 self._session = await self._new_api().async_create_session(code)
             except EnableBankingAuthError:
-                return self.async_abort(reason="invalid_auth")
+                return self._async_external_error("invalid_auth")
             except EnableBankingConnectionError:
-                return self.async_abort(reason="cannot_connect")
+                return self._async_external_error("cannot_connect")
             except EnableBankingError:
-                return self.async_abort(reason="unknown")
+                return self._async_external_error("unknown")
             return self.async_external_step_done(next_step_id="finish")
 
         self._state = secrets.token_urlsafe(32)
@@ -200,6 +203,17 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.hass.data[DOMAIN][DATA_PENDING_FLOWS].pop(self._state, None)
             return self.async_abort(reason="cannot_connect")
         return self.async_external_step(step_id="authorize", url=authorization_url)
+
+    def _async_external_error(self, reason: str) -> ConfigFlowResult:
+        """Finish the external step before aborting with an authorization error."""
+        self._authorization_error = reason
+        return self.async_external_step_done(next_step_id="authorization_error")
+
+    async def async_step_authorization_error(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Abort after an external authorization error."""
+        return self.async_abort(reason=self._authorization_error or "unknown")
 
     async def async_step_finish(
         self, user_input: dict[str, Any] | None = None

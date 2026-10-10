@@ -21,3 +21,4 @@ DEFAULT_PSU_TYPE = "personal"
 SCAN_INTERVAL = timedelta(hours=1)
 
 DATA_PENDING_FLOWS = "pending_flows"
+DATA_CALLBACK_REGISTERED = "callback_registered"

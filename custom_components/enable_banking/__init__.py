@@ -5,24 +5,27 @@ from __future__ import annotations
 from typing import Any
 
 from aiohttp import web
-from homeassistant.components.http import HomeAssistantView
+from homeassistant.components.http import KEY_HASS, HomeAssistantView
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import KEY_HASS, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import UnknownFlow
 from homeassistant.helpers import aiohttp_client
+from homeassistant.helpers import config_validation as cv
 
 from .api import EnableBankingApi
 from .const import (
     CALLBACK_PATH,
     CONF_APPLICATION_ID,
     CONF_PRIVATE_KEY,
+    DATA_CALLBACK_REGISTERED,
     DATA_PENDING_FLOWS,
     DOMAIN,
 )
 from .coordinator import EnableBankingCoordinator
 
 PLATFORMS = [Platform.SENSOR]
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
 class EnableBankingCallbackView(HomeAssistantView):
@@ -73,10 +76,20 @@ class EnableBankingCallbackView(HomeAssistantView):
         )
 
 
+@callback
+def async_ensure_callback_registered(hass: HomeAssistant) -> None:
+    """Register callback handling once, including during a config flow."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    domain_data.setdefault(DATA_PENDING_FLOWS, {})
+    if domain_data.get(DATA_CALLBACK_REGISTERED):
+        return
+    hass.http.register_view(EnableBankingCallbackView)
+    domain_data[DATA_CALLBACK_REGISTERED] = True
+
+
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
     """Initialize callback handling for config flows."""
-    hass.data.setdefault(DOMAIN, {})[DATA_PENDING_FLOWS] = {}
-    hass.http.register_view(EnableBankingCallbackView)
+    async_ensure_callback_registered(hass)
     return True
 
 
