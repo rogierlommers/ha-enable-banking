@@ -17,6 +17,7 @@ from homeassistant.helpers.network import NoURLAvailableError, get_url
 from . import async_ensure_callback_registered
 from .api import (
     EnableBankingApi,
+    EnableBankingApplicationAuthError,
     EnableBankingAuthError,
     EnableBankingConnectionError,
     EnableBankingError,
@@ -34,6 +35,7 @@ from .const import (
     CONF_TRANSACTION_COUNT,
     CONF_TRANSACTION_LOOKBACK_DAYS,
     DATA_PENDING_FLOWS,
+    DATA_REAUTH_REASONS,
     DEFAULT_CONSENT_DAYS,
     DEFAULT_PSU_TYPE,
     DEFAULT_REFRESH_INTERVAL,
@@ -43,6 +45,7 @@ from .const import (
     MAX_REFRESH_INTERVAL,
     MAX_TRANSACTION_COUNT,
     MIN_REFRESH_INTERVAL,
+    REAUTH_REASON_APPLICATION,
     TRANSACTION_LOOKBACK_OPTIONS,
 )
 
@@ -62,6 +65,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._authorization_error: str | None = None
         self._reauth_entry: ConfigEntry | None = None
         self._reconfigure_entry: ConfigEntry | None = None
+        self._reauth_application_credentials = False
 
     def _callback_url(self) -> str:
         base_url = get_url(
@@ -249,10 +253,27 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         title = f"{self._data[CONF_ASPSP_NAME]} ({self._data[CONF_COUNTRY]})"
 
         if self._reauth_entry is not None:
-            self._abort_if_unique_id_mismatch()
+            if self._reauth_application_credentials:
+                existing_entry = (
+                    self.hass.config_entries.async_entry_for_domain_unique_id(
+                        DOMAIN, unique_id
+                    )
+                )
+                if (
+                    existing_entry is not None
+                    and existing_entry.entry_id != self._reauth_entry.entry_id
+                ):
+                    return self.async_abort(reason="already_configured")
+            else:
+                self._abort_if_unique_id_mismatch()
             return self.async_update_reload_and_abort(
                 self._reauth_entry,
                 data_updates=self._data,
+                unique_id=(
+                    unique_id
+                    if self._reauth_application_credentials
+                    else self.unique_id
+                ),
             )
         if self._reconfigure_entry is not None:
             self._abort_if_unique_id_mismatch()
@@ -267,7 +288,52 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Start bank consent renewal."""
         self._reauth_entry = self._get_reauth_entry()
         self._data = dict(entry_data)
+        reauth_reason = (
+            self.hass.data.get(DOMAIN, {})
+            .get(DATA_REAUTH_REASONS, {})
+            .pop(self._reauth_entry.entry_id, None)
+        )
+        if reauth_reason == REAUTH_REASON_APPLICATION:
+            self._reauth_application_credentials = True
+            return await self.async_step_reauth_credentials()
         return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect replacement Enable Banking application credentials."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            self._data.update(user_input)
+            try:
+                await self._new_api().async_validate_application()
+            except EnableBankingApplicationAuthError:
+                errors["base"] = "invalid_auth"
+            except EnableBankingConnectionError:
+                errors["base"] = "cannot_connect"
+            except EnableBankingError:
+                errors["base"] = "unknown"
+            else:
+                return await self.async_step_authorize()
+
+        return self.async_show_form(
+            step_id="reauth_credentials",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_APPLICATION_ID,
+                        default=self._data[CONF_APPLICATION_ID],
+                    ): str,
+                    vol.Required(CONF_PRIVATE_KEY): selector.TextSelector(
+                        selector.TextSelectorConfig(
+                            type=selector.TextSelectorType.PASSWORD,
+                            multiline=True,
+                        )
+                    ),
+                }
+            ),
+            errors=errors,
+        )
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None

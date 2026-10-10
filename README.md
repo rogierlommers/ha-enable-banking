@@ -247,6 +247,13 @@ the number of transactions needed and protect dashboards, history, the database,
 and backups accordingly. Enable Banking pagination is capped to prevent an
 unbounded number of API requests during one refresh.
 
+Home Assistant does not provide per-dashboard confidentiality for entity
+states. Authenticated Home Assistant users who are allowed to read entity states
+may be able to retrieve transaction attributes even when the transaction card
+is hidden from their dashboard. Enable transaction sensors only when all such
+users are trusted, or apply instance-level access controls outside this
+integration.
+
 ## Consent renewal
 
 Bank consent has an expiry date. When it expires or is revoked, Home Assistant

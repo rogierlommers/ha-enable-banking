@@ -67,6 +67,11 @@ configuration directory, backups, remote-access URL, and Enable Banking private
 key. Access to entities and dashboards containing banking information should be
 limited to authorized people.
 
+Dashboard visibility is not a confidentiality boundary. Authenticated Home
+Assistant users with permission to read entity states may be able to retrieve
+balance states and transaction attributes even when those entities are not
+shown on their dashboards.
+
 ## Revoking access and deleting data
 
 Users can stop future access by removing the integration and revoking or

@@ -7,7 +7,9 @@ import pytest
 
 from custom_components.enable_banking.api import (
     EnableBankingApi,
+    EnableBankingApplicationAuthError,
     EnableBankingAuthError,
+    EnableBankingError,
 )
 
 
@@ -85,3 +87,47 @@ async def test_authorization_explicitly_requests_balance_and_transaction_access(
     access = request.await_args.kwargs["json"]["access"]
     assert access["balances"] is True
     assert access["transactions"] is True
+
+
+def _api_with_response_status(status: int) -> EnableBankingApi:
+    """Create an API client whose shared session returns one HTTP status."""
+    response = MagicMock(status=status)
+    response.__aenter__ = AsyncMock(return_value=response)
+    response.__aexit__ = AsyncMock(return_value=None)
+    response.json = AsyncMock(return_value={})
+    session = MagicMock()
+    session.request.return_value = response
+    return EnableBankingApi(session, "app-id", "private-key")
+
+
+async def test_missing_session_is_auth_error() -> None:
+    """A missing stored session asks Home Assistant to start reauthentication."""
+    api = _api_with_response_status(404)
+
+    with (
+        patch.object(api, "_create_token", return_value="signed-token"),
+        pytest.raises(EnableBankingAuthError),
+    ):
+        await api.async_get_session("missing-session")
+
+
+async def test_account_404_remains_generic_api_error() -> None:
+    """A missing account resource does not misclassify app credentials."""
+    api = _api_with_response_status(404)
+
+    with (
+        patch.object(api, "_create_token", return_value="signed-token"),
+        pytest.raises(EnableBankingError, match=r"failed \(404\)"),
+    ):
+        await api.async_get_account_details("missing-account")
+
+
+async def test_http_401_is_application_credential_error() -> None:
+    """Provider JWT rejection starts credential replacement, not consent renewal."""
+    api = _api_with_response_status(401)
+
+    with (
+        patch.object(api, "_create_token", return_value="signed-token"),
+        pytest.raises(EnableBankingApplicationAuthError),
+    ):
+        await api.async_get_session("session-id")

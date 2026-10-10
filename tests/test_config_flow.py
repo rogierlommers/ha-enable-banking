@@ -18,7 +18,9 @@ from custom_components.enable_banking.const import (
     CONF_TRANSACTION_COUNT,
     CONF_TRANSACTION_LOOKBACK_DAYS,
     DATA_PENDING_FLOWS,
+    DATA_REAUTH_REASONS,
     DOMAIN,
+    REAUTH_REASON_APPLICATION,
 )
 
 
@@ -164,7 +166,7 @@ async def test_options_flow_updates_polling_and_transaction_count(
 
 
 async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
-    """Existing users can renew consent after transaction access changes."""
+    """Reconfigure replaces the session and reloads the existing entry."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="application-id:NL:Example Bank:personal",
@@ -210,4 +212,166 @@ async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
                 result["flow_id"], user_input={}
             )
 
-    assert result["type"] is data_entry_flow.FlowResultType.EXTERNAL_STEP
+        assert result["type"] is data_entry_flow.FlowResultType.EXTERNAL_STEP
+        state = next(iter(hass.data[DOMAIN][DATA_PENDING_FLOWS]))
+        with patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_create_session",
+            new=AsyncMock(return_value={"session_id": "new-session-id"}),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={"state": state, "code": "authorization-code"},
+            )
+        assert result["type"] is data_entry_flow.FlowResultType.EXTERNAL_STEP_DONE
+
+        with patch.object(hass.config_entries, "async_schedule_reload") as reload_entry:
+            result = await hass.config_entries.flow.async_configure(result["flow_id"])
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_SESSION_ID] == "new-session-id"
+    reload_entry.assert_called_once_with(entry.entry_id)
+
+
+async def test_session_reauth_replaces_session(hass: HomeAssistant) -> None:
+    """Expired consent completes reauthentication on the original entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="application-id:NL:Example Bank:personal",
+        data={
+            CONF_APPLICATION_ID: "application-id",
+            CONF_PRIVATE_KEY: "private-key",
+            CONF_COUNTRY: "NL",
+            CONF_ASPSP_NAME: "Example Bank",
+            CONF_PSU_TYPE: "personal",
+            CONF_CONSENT_DAYS: 90,
+            CONF_SESSION_ID: "old-session-id",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=dict(entry.data),
+        )
+        assert result["step_id"] == "reauth_confirm"
+        with patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_start_authorization",
+            new=AsyncMock(return_value="https://bank.example/authorize"),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], user_input={}
+            )
+        state = next(iter(hass.data[DOMAIN][DATA_PENDING_FLOWS]))
+        with patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_create_session",
+            new=AsyncMock(return_value={"session_id": "renewed-session-id"}),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={"state": state, "code": "authorization-code"},
+            )
+        with patch.object(hass.config_entries, "async_schedule_reload"):
+            result = await hass.config_entries.flow.async_configure(result["flow_id"])
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_SESSION_ID] == "renewed-session-id"
+
+
+async def test_application_reauth_replaces_credentials(hass: HomeAssistant) -> None:
+    """Rejected application credentials can be replaced before consent renewal."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="old-app:NL:Example Bank:personal",
+        data={
+            CONF_APPLICATION_ID: "old-app",
+            CONF_PRIVATE_KEY: "old-private-key",
+            CONF_COUNTRY: "NL",
+            CONF_ASPSP_NAME: "Example Bank",
+            CONF_PSU_TYPE: "personal",
+            CONF_CONSENT_DAYS: 90,
+            CONF_SESSION_ID: "old-session-id",
+        },
+    )
+    entry.add_to_hass(hass)
+    hass.data.setdefault(DOMAIN, {}).setdefault(DATA_REAUTH_REASONS, {})[
+        entry.entry_id
+    ] = REAUTH_REASON_APPLICATION
+
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=dict(entry.data),
+        )
+        assert result["step_id"] == "reauth_credentials"
+        with (
+            patch(
+                "custom_components.enable_banking.config_flow.EnableBankingApi."
+                "async_validate_application",
+                new=AsyncMock(),
+            ),
+            patch(
+                "custom_components.enable_banking.config_flow.EnableBankingApi."
+                "async_start_authorization",
+                new=AsyncMock(return_value="https://bank.example/authorize"),
+            ),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={
+                    CONF_APPLICATION_ID: "new-app",
+                    CONF_PRIVATE_KEY: "new-private-key",
+                },
+            )
+        state = next(iter(hass.data[DOMAIN][DATA_PENDING_FLOWS]))
+        with patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_create_session",
+            new=AsyncMock(return_value={"session_id": "new-session-id"}),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={"state": state, "code": "authorization-code"},
+            )
+        with patch.object(hass.config_entries, "async_schedule_reload"):
+            result = await hass.config_entries.flow.async_configure(result["flow_id"])
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_APPLICATION_ID] == "new-app"
+    assert entry.data[CONF_PRIVATE_KEY] == "new-private-key"
+    assert entry.data[CONF_SESSION_ID] == "new-session-id"
+    assert entry.unique_id == "new-app:NL:Example Bank:personal"

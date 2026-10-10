@@ -30,3 +30,5 @@ TRANSACTION_LOOKBACK_OPTIONS = (7, 30, 90, 365)
 
 DATA_PENDING_FLOWS = "pending_flows"
 DATA_CALLBACK_REGISTERED = "callback_registered"
+DATA_REAUTH_REASONS = "reauth_reasons"
+REAUTH_REASON_APPLICATION = "application_credentials"

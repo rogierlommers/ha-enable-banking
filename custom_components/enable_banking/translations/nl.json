@@ -28,6 +28,14 @@
         "title": "Toestemming voor de bank vernieuwen",
         "description": "De toestemming voor de bank is verlopen of ingetrokken. Ga verder om de toegang opnieuw te autoriseren."
       },
+      "reauth_credentials": {
+        "title": "Enable Banking-applicatiegegevens bijwerken",
+        "description": "Enable Banking heeft de opgeslagen applicatiegegevens geweigerd. Voer een geldig applicatie-ID en een geldige privé-RSA-sleutel in voordat je de banktoestemming vernieuwt.",
+        "data": {
+          "application_id": "Applicatie-ID",
+          "private_key": "Privé-RSA-sleutel (PEM)"
+        }
+      },
       "reconfigure": {
         "title": "Toestemming voor de bank vernieuwen",
         "description": "Ga verder om de bank opnieuw te autoriseren. Hiermee wordt de toestemming vernieuwd en wordt expliciet toegang tot saldi en transacties aangevraagd."
@@ -57,7 +65,7 @@
     "step": {
       "init": {
         "title": "Opties voor Enable Banking",
-        "description": "Kies hoe vaak rekeninggegevens worden vernieuwd, hoeveel recente transacties per rekening worden getoond en hoe ver er wordt teruggekeken. Stel recente transacties in op 0 om het ophalen van transacties uit te schakelen. Transactieoverzichten worden opgeslagen in sensorattributen en kunnen door de recorder van Home Assistant worden bewaard.",
+        "description": "Kies hoe vaak rekeninggegevens worden vernieuwd, hoeveel recente transacties per rekening worden getoond en hoe ver er wordt teruggekeken. Stel recente transacties in op 0 om het ophalen van transacties uit te schakelen. Transactieoverzichten worden opgeslagen in sensorattributen, kunnen door de recorder van Home Assistant worden bewaard en kunnen worden gelezen door geauthenticeerde Home Assistant-gebruikers met toegang tot entiteitsstatussen. Het verbergen van een dashboardkaart is geen toegangsbeveiliging.",
         "data": {
           "refresh_interval": "Vernieuwingsinterval (minuten)",
           "transaction_count": "Recente transacties per rekening",

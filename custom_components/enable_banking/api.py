@@ -12,6 +12,9 @@ import jwt
 
 from .const import API_BASE_URL, MAX_TRANSACTION_PAGES
 
+_APPLICATION_AUTH_ERROR_STATUSES = frozenset({401, 403})
+_SESSION_AUTH_ERROR_STATUSES = frozenset({404})
+
 
 class EnableBankingError(Exception):
     """Base error raised by the Enable Banking client."""
@@ -19,6 +22,14 @@ class EnableBankingError(Exception):
 
 class EnableBankingAuthError(EnableBankingError):
     """Raised when application or bank authorization is invalid."""
+
+
+class EnableBankingApplicationAuthError(EnableBankingAuthError):
+    """Raised when Enable Banking application credentials are invalid."""
+
+
+class EnableBankingSessionAuthError(EnableBankingAuthError):
+    """Raised when a stored bank session is missing or invalid."""
 
 
 class EnableBankingConnectionError(EnableBankingError):
@@ -60,11 +71,14 @@ class EnableBankingApi:
         *,
         params: Mapping[str, str] | None = None,
         json: Mapping[str, Any] | None = None,
+        session_error_statuses: frozenset[int] = frozenset(),
     ) -> dict[str, Any]:
         try:
             token = await asyncio.to_thread(self._create_token)
         except (ValueError, TypeError, jwt.PyJWTError) as err:
-            raise EnableBankingAuthError("Invalid application private key") from err
+            raise EnableBankingApplicationAuthError(
+                "Invalid application private key"
+            ) from err
 
         try:
             async with self._session.request(
@@ -78,9 +92,13 @@ class EnableBankingApi:
                 },
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as response:
-                if response.status in {401, 403}:
-                    raise EnableBankingAuthError(
+                if response.status in _APPLICATION_AUTH_ERROR_STATUSES:
+                    raise EnableBankingApplicationAuthError(
                         f"Enable Banking rejected authorization ({response.status})"
+                    )
+                if response.status in session_error_statuses:
+                    raise EnableBankingSessionAuthError(
+                        f"Enable Banking session is unavailable ({response.status})"
                     )
                 if response.status >= 400:
                     raise EnableBankingError(
@@ -152,7 +170,11 @@ class EnableBankingApi:
 
     async def async_get_session(self, session_id: str) -> dict[str, Any]:
         """Return a user session."""
-        return await self._request("GET", f"/sessions/{session_id}")
+        return await self._request(
+            "GET",
+            f"/sessions/{session_id}",
+            session_error_statuses=_SESSION_AUTH_ERROR_STATUSES,
+        )
 
     async def async_get_account_details(self, account_id: str) -> dict[str, Any]:
         """Return account metadata."""
