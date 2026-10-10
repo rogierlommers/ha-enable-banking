@@ -1,0 +1,66 @@
+{
+  "title": "Enable Banking",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Enable Banking",
+        "description": "Register `{callback_url}` as an exact redirect URL in your Enable Banking application. The private key is stored in Home Assistant's config entry and backups.",
+        "data": {
+          "application_id": "Application ID",
+          "private_key": "Private RSA key (PEM)",
+          "country": "Bank country"
+        }
+      },
+      "bank": {
+        "title": "Choose a bank",
+        "description": "Choose the bank and how long access should be requested. The bank may enforce a shorter period.",
+        "data": {
+          "aspsp_name": "Bank",
+          "psu_type": "Customer type",
+          "consent_days": "Requested consent duration (days)"
+        }
+      },
+      "authorize": {
+        "title": "Authorize bank access",
+        "description": "Complete authorization in the opened bank page, then return here."
+      },
+      "reauth_confirm": {
+        "title": "Renew bank consent",
+        "description": "The bank consent expired or was revoked. Continue to authorize access again."
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to Enable Banking",
+      "invalid_auth": "The application ID or private key is invalid",
+      "no_banks": "Enable Banking returned no banks for this country",
+      "unknown": "Unexpected response from Enable Banking"
+    },
+    "abort": {
+      "access_denied": "Bank authorization was cancelled or denied",
+      "already_configured": "This bank connection is already configured",
+      "cannot_connect": "Unable to connect to Enable Banking",
+      "external_url_missing": "Configure a public HTTPS external URL in Home Assistant first",
+      "invalid_auth": "Enable Banking rejected the authorization",
+      "invalid_session": "Enable Banking did not return a valid session",
+      "invalid_state": "The authorization response did not match this setup request",
+      "missing_code": "The bank did not return an authorization code",
+      "reauth_successful": "Bank consent was renewed",
+      "unknown": "Unexpected response from Enable Banking"
+    }
+  },
+  "selector": {
+    "psu_type": {
+      "options": {
+        "personal": "Personal",
+        "business": "Business"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "balance": {
+        "name": "Balance"
+      }
+    }
+  }
+}

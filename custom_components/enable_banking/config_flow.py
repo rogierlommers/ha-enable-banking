@@ -1,0 +1,247 @@
+"""Config flow for Enable Banking."""
+
+from __future__ import annotations
+
+import hmac
+import secrets
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+import voluptuous as vol
+from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.helpers import aiohttp_client, selector
+from homeassistant.helpers.network import NoURLAvailableError, get_url
+
+from .api import (
+    EnableBankingApi,
+    EnableBankingAuthError,
+    EnableBankingConnectionError,
+    EnableBankingError,
+)
+from .const import (
+    CALLBACK_PATH,
+    CONF_APPLICATION_ID,
+    CONF_ASPSP_NAME,
+    CONF_CONSENT_DAYS,
+    CONF_COUNTRY,
+    CONF_PRIVATE_KEY,
+    CONF_PSU_TYPE,
+    CONF_SESSION_ID,
+    DATA_PENDING_FLOWS,
+    DEFAULT_CONSENT_DAYS,
+    DEFAULT_PSU_TYPE,
+    DOMAIN,
+)
+
+
+class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+    """Handle an Enable Banking config flow."""
+
+    VERSION = 1
+
+    def __init__(self) -> None:
+        """Initialize flow state."""
+        self._data: dict[str, Any] = {}
+        self._api: EnableBankingApi | None = None
+        self._banks: list[str] = []
+        self._state: str | None = None
+        self._session: dict[str, Any] | None = None
+        self._reauth_entry: ConfigEntry | None = None
+
+    def _callback_url(self) -> str:
+        base_url = get_url(
+            self.hass,
+            allow_internal=False,
+            prefer_external=True,
+            require_ssl=True,
+        )
+        return f"{base_url.rstrip('/')}{CALLBACK_PATH}"
+
+    def _new_api(self) -> EnableBankingApi:
+        return EnableBankingApi(
+            aiohttp_client.async_get_clientsession(self.hass),
+            self._data[CONF_APPLICATION_ID],
+            self._data[CONF_PRIVATE_KEY],
+        )
+
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Collect and validate Enable Banking application credentials."""
+        errors: dict[str, str] = {}
+        try:
+            callback_url = self._callback_url()
+        except NoURLAvailableError:
+            return self.async_abort(reason="external_url_missing")
+
+        if user_input is not None:
+            self._data.update(user_input)
+            self._data[CONF_COUNTRY] = self._data[CONF_COUNTRY].upper()
+            self._api = self._new_api()
+            try:
+                await self._api.async_validate_application()
+                aspsps = await self._api.async_get_aspsps(self._data[CONF_COUNTRY])
+            except EnableBankingAuthError:
+                errors["base"] = "invalid_auth"
+            except EnableBankingConnectionError:
+                errors["base"] = "cannot_connect"
+            except EnableBankingError:
+                errors["base"] = "unknown"
+            else:
+                self._banks = sorted(
+                    {
+                        str(item["name"])
+                        for item in aspsps
+                        if isinstance(item.get("name"), str)
+                    }
+                )
+                if not self._banks:
+                    errors["base"] = "no_banks"
+                else:
+                    return await self.async_step_bank()
+
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_APPLICATION_ID): str,
+                vol.Required(CONF_PRIVATE_KEY): selector.TextSelector(
+                    selector.TextSelectorConfig(
+                        type=selector.TextSelectorType.PASSWORD,
+                        multiline=True,
+                    )
+                ),
+                vol.Required(CONF_COUNTRY, default="NL"): selector.CountrySelector(),
+            }
+        )
+        return self.async_show_form(
+            step_id="user",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"callback_url": callback_url},
+        )
+
+    async def async_step_bank(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Select a bank and consent settings."""
+        if user_input is not None:
+            self._data.update(user_input)
+            return await self.async_step_authorize()
+
+        return self.async_show_form(
+            step_id="bank",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ASPSP_NAME): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=self._banks,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Required(
+                        CONF_PSU_TYPE, default=DEFAULT_PSU_TYPE
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=["personal", "business"],
+                            translation_key="psu_type",
+                        )
+                    ),
+                    vol.Required(
+                        CONF_CONSENT_DAYS, default=DEFAULT_CONSENT_DAYS
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=1,
+                            max=365,
+                            mode=selector.NumberSelectorMode.BOX,
+                        )
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_authorize(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Start authorization or process its callback."""
+        if user_input is not None:
+            state = str(user_input.get("state", ""))
+            if self._state is None or not hmac.compare_digest(self._state, state):
+                return self.async_abort(reason="invalid_state")
+            if user_input.get("error"):
+                return self.async_abort(reason="access_denied")
+            code = user_input.get("code")
+            if not isinstance(code, str) or not code:
+                return self.async_abort(reason="missing_code")
+            try:
+                self._session = await self._new_api().async_create_session(code)
+            except EnableBankingAuthError:
+                return self.async_abort(reason="invalid_auth")
+            except EnableBankingConnectionError:
+                return self.async_abort(reason="cannot_connect")
+            except EnableBankingError:
+                return self.async_abort(reason="unknown")
+            return self.async_external_step_done(next_step_id="finish")
+
+        self._state = secrets.token_urlsafe(32)
+        self.hass.data[DOMAIN][DATA_PENDING_FLOWS][self._state] = self.flow_id
+        valid_until = datetime.now(tz=UTC) + timedelta(
+            days=int(self._data[CONF_CONSENT_DAYS])
+        )
+        try:
+            authorization_url = await self._new_api().async_start_authorization(
+                country=self._data[CONF_COUNTRY],
+                aspsp_name=self._data[CONF_ASPSP_NAME],
+                psu_type=self._data[CONF_PSU_TYPE],
+                valid_until=valid_until,
+                state=self._state,
+                redirect_url=self._callback_url(),
+            )
+        except (EnableBankingError, NoURLAvailableError):
+            self.hass.data[DOMAIN][DATA_PENDING_FLOWS].pop(self._state, None)
+            return self.async_abort(reason="cannot_connect")
+        return self.async_external_step(step_id="authorize", url=authorization_url)
+
+    async def async_step_finish(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Create or update the config entry after authorization."""
+        if self._session is None or not isinstance(
+            self._session.get("session_id"), str
+        ):
+            return self.async_abort(reason="invalid_session")
+        self._data[CONF_SESSION_ID] = self._session["session_id"]
+        unique_id = ":".join(
+            (
+                self._data[CONF_APPLICATION_ID],
+                self._data[CONF_COUNTRY],
+                self._data[CONF_ASPSP_NAME],
+                self._data[CONF_PSU_TYPE],
+            )
+        )
+        await self.async_set_unique_id(unique_id)
+        title = f"{self._data[CONF_ASPSP_NAME]} ({self._data[CONF_COUNTRY]})"
+
+        if self._reauth_entry is not None:
+            self._abort_if_unique_id_mismatch()
+            return self.async_update_reload_and_abort(
+                self._reauth_entry,
+                data_updates=self._data,
+            )
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(title=title, data=self._data)
+
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
+        """Start bank consent renewal."""
+        self._reauth_entry = self._get_reauth_entry()
+        self._data = dict(entry_data)
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Confirm bank consent renewal."""
+        if user_input is not None:
+            return await self.async_step_authorize()
+        return self.async_show_form(
+            step_id="reauth_confirm", data_schema=vol.Schema({})
+        )

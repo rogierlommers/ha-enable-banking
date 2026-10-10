@@ -1,0 +1,66 @@
+{
+  "title": "Enable Banking",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Verbinding maken met Enable Banking",
+        "description": "Registreer `{callback_url}` als exacte omleidings-URL in je Enable Banking-applicatie. De privésleutel wordt opgeslagen in de configuratie en back-ups van Home Assistant.",
+        "data": {
+          "application_id": "Applicatie-ID",
+          "private_key": "Privé-RSA-sleutel (PEM)",
+          "country": "Land van de bank"
+        }
+      },
+      "bank": {
+        "title": "Kies een bank",
+        "description": "Kies de bank en hoelang toegang moet worden aangevraagd. De bank kan een kortere periode hanteren.",
+        "data": {
+          "aspsp_name": "Bank",
+          "psu_type": "Type klant",
+          "consent_days": "Gewenste toestemmingsduur (dagen)"
+        }
+      },
+      "authorize": {
+        "title": "Toegang tot de bank autoriseren",
+        "description": "Voltooi de autorisatie op de geopende bankpagina en keer daarna hier terug."
+      },
+      "reauth_confirm": {
+        "title": "Toestemming voor de bank vernieuwen",
+        "description": "De toestemming voor de bank is verlopen of ingetrokken. Ga verder om de toegang opnieuw te autoriseren."
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met Enable Banking",
+      "invalid_auth": "Het applicatie-ID of de privésleutel is ongeldig",
+      "no_banks": "Enable Banking heeft geen banken voor dit land teruggegeven",
+      "unknown": "Onverwacht antwoord van Enable Banking"
+    },
+    "abort": {
+      "access_denied": "De bankautorisatie is geannuleerd of geweigerd",
+      "already_configured": "Deze bankverbinding is al geconfigureerd",
+      "cannot_connect": "Kan geen verbinding maken met Enable Banking",
+      "external_url_missing": "Configureer eerst een openbare externe HTTPS-URL in Home Assistant",
+      "invalid_auth": "Enable Banking heeft de autorisatie geweigerd",
+      "invalid_session": "Enable Banking heeft geen geldige sessie teruggegeven",
+      "invalid_state": "Het autorisatieantwoord hoort niet bij deze configuratieaanvraag",
+      "missing_code": "De bank heeft geen autorisatiecode teruggegeven",
+      "reauth_successful": "De toestemming voor de bank is vernieuwd",
+      "unknown": "Onverwacht antwoord van Enable Banking"
+    }
+  },
+  "selector": {
+    "psu_type": {
+      "options": {
+        "personal": "Particulier",
+        "business": "Zakelijk"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "balance": {
+        "name": "Saldo"
+      }
+    }
+  }
+}

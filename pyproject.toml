@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ha-enable-banking"
+version = "0.1.0"
+description = "Home Assistant custom integration for Enable Banking"
+requires-python = ">=3.13"
+dependencies = [
+  "PyJWT[crypto]==2.10.1",
+]
+
+[project.optional-dependencies]
+test = [
+  "homeassistant==2025.1.4",
+  "pytest>=8.3.4",
+  "pytest-aiohttp>=1.0.5",
+  "pytest-homeassistant-custom-component==0.13.205",
+  "pytest-cov>=6.0.0",
+  "ruff>=0.9.3",
+]
+
+[tool.setuptools.packages.find]
+include = ["custom_components*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["ALL"]
+ignore = [
+  "ARG001",
+  "ARG002",
+  "ARG004",
+  "BLE001",
+  "C901",
+  "ANN401",
+  "COM812",
+  "CPY001",
+  "D203",
+  "D213",
+  "EM101",
+  "EM102",
+  "PLR0911",
+  "PLR0913",
+  "PLR2004",
+  "S101",
+  "TC001",
+  "TC002",
+  "TC003",
+  "TRY003",
+  "TRY300",
+]
