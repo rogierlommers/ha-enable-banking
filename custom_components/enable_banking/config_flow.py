@@ -14,7 +14,11 @@ from homeassistant.core import callback
 from homeassistant.helpers import aiohttp_client, selector
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
-from . import async_ensure_callback_registered
+from . import (
+    async_ensure_callback_registered,
+    async_register_pending_flow,
+    async_remove_pending_flow,
+)
 from .api import (
     EnableBankingApi,
     EnableBankingApplicationAuthError,
@@ -34,7 +38,6 @@ from .const import (
     CONF_SESSION_ID,
     CONF_TRANSACTION_COUNT,
     CONF_TRANSACTION_LOOKBACK_DAYS,
-    DATA_PENDING_FLOWS,
     DATA_REAUTH_REASONS,
     DEFAULT_CONSENT_DAYS,
     DEFAULT_PSU_TYPE,
@@ -60,6 +63,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._data: dict[str, Any] = {}
         self._api: EnableBankingApi | None = None
         self._banks: list[str] = []
+        self._bank_psu_types: dict[str, set[str]] = {}
         self._state: str | None = None
         self._session: dict[str, Any] | None = None
         self._authorization_error: str | None = None
@@ -115,6 +119,18 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         if isinstance(item.get("name"), str)
                     }
                 )
+                self._bank_psu_types = {}
+                for item in aspsps:
+                    if not isinstance((name := item.get("name")), str):
+                        continue
+                    psu_types = item.get("psu_types")
+                    if not isinstance(psu_types, list):
+                        psu_types = ["personal", "business"]
+                    self._bank_psu_types[name] = {
+                        psu_type
+                        for psu_type in psu_types
+                        if psu_type in {"personal", "business"}
+                    }
                 if not self._banks:
                     errors["base"] = "no_banks"
                 else:
@@ -143,39 +159,48 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Select a bank and consent settings."""
+        errors: dict[str, str] = {}
         if user_input is not None:
-            self._data.update(user_input)
-            return await self.async_step_authorize()
+            supported_types = self._bank_psu_types.get(
+                user_input[CONF_ASPSP_NAME], {"personal", "business"}
+            )
+            if user_input[CONF_PSU_TYPE] not in supported_types:
+                errors[CONF_PSU_TYPE] = "unsupported_psu_type"
+            else:
+                self._data.update(user_input)
+                return await self.async_step_authorize()
 
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_ASPSP_NAME): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=self._banks,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Required(
+                    CONF_PSU_TYPE, default=DEFAULT_PSU_TYPE
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["personal", "business"],
+                        translation_key="psu_type",
+                    )
+                ),
+                vol.Required(
+                    CONF_CONSENT_DAYS, default=DEFAULT_CONSENT_DAYS
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=1,
+                        max=365,
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+            }
+        )
         return self.async_show_form(
             step_id="bank",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_ASPSP_NAME): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=self._banks,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                    vol.Required(
-                        CONF_PSU_TYPE, default=DEFAULT_PSU_TYPE
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=["personal", "business"],
-                            translation_key="psu_type",
-                        )
-                    ),
-                    vol.Required(
-                        CONF_CONSENT_DAYS, default=DEFAULT_CONSENT_DAYS
-                    ): selector.NumberSelector(
-                        selector.NumberSelectorConfig(
-                            min=1,
-                            max=365,
-                            mode=selector.NumberSelectorMode.BOX,
-                        )
-                    ),
-                }
-            ),
+            data_schema=self.add_suggested_values_to_schema(schema, user_input),
+            errors=errors,
         )
 
     async def async_step_authorize(
@@ -203,7 +228,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         async_ensure_callback_registered(self.hass)
         self._state = secrets.token_urlsafe(32)
-        self.hass.data[DOMAIN][DATA_PENDING_FLOWS][self._state] = self.flow_id
+        async_register_pending_flow(self.hass, self._state, self.flow_id)
         valid_until = datetime.now(tz=UTC) + timedelta(
             days=int(self._data[CONF_CONSENT_DAYS])
         )
@@ -217,7 +242,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 redirect_url=self._callback_url(),
             )
         except (EnableBankingError, NoURLAvailableError):
-            self.hass.data[DOMAIN][DATA_PENDING_FLOWS].pop(self._state, None)
+            async_remove_pending_flow(self.hass, self._state)
             return self.async_abort(reason="cannot_connect")
         return self.async_external_step(step_id="authorize", url=authorization_url)
 
@@ -335,6 +360,11 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    @callback
+    def async_remove(self) -> None:
+        """Clean up pending authorization state when a flow is removed."""
+        async_remove_pending_flow(self.hass, self._state)
+
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -417,9 +447,11 @@ class EnableBankingOptionsFlow(config_entries.OptionsFlow):
                     ),
                     vol.Required(
                         CONF_TRANSACTION_LOOKBACK_DAYS,
-                        default=self._config_entry.options.get(
-                            CONF_TRANSACTION_LOOKBACK_DAYS,
-                            DEFAULT_TRANSACTION_LOOKBACK_DAYS,
+                        default=str(
+                            self._config_entry.options.get(
+                                CONF_TRANSACTION_LOOKBACK_DAYS,
+                                DEFAULT_TRANSACTION_LOOKBACK_DAYS,
+                            )
                         ),
                     ): vol.All(
                         selector.SelectSelector(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass
@@ -31,10 +32,12 @@ from .const import (
     DEFAULT_TRANSACTION_COUNT,
     DEFAULT_TRANSACTION_LOOKBACK_DAYS,
     DOMAIN,
+    MAX_PARALLEL_ACCOUNTS,
     MAX_REFRESH_INTERVAL,
     MAX_TRANSACTION_COUNT,
     MIN_REFRESH_INTERVAL,
     REAUTH_REASON_APPLICATION,
+    TRANSACTION_LOOKBACK_OPTIONS,
 )
 
 BALANCE_PRIORITY = ("ITAV", "CLAV", "ITBD", "CLBD")
@@ -214,7 +217,7 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
         )
         self.transaction_lookback_days = (
             configured_lookback
-            if configured_lookback in {7, 30, 90, 365}
+            if configured_lookback in TRANSACTION_LOOKBACK_OPTIONS
             else DEFAULT_TRANSACTION_LOOKBACK_DAYS
         )
         self._account_details: dict[str, dict[str, Any]] = {}
@@ -303,25 +306,38 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
             if not isinstance(account_ids, list):
                 raise UpdateFailed("Enable Banking returned invalid session data")
 
+            valid_account_ids = [
+                account_id for account_id in account_ids if isinstance(account_id, str)
+            ]
+            semaphore = asyncio.Semaphore(MAX_PARALLEL_ACCOUNTS)
+
+            async def async_fetch_account(
+                account_id: str,
+            ) -> AccountBalance | None:
+                async with semaphore:
+                    return await self._async_get_account_balance(account_id)
+
+            outcomes = await asyncio.gather(
+                *(async_fetch_account(account_id) for account_id in valid_account_ids),
+                return_exceptions=True,
+            )
             result: dict[str, AccountBalance] = {}
             failures = 0
-            for account_id in account_ids:
-                if not isinstance(account_id, str):
-                    continue
-                try:
-                    account = await self._async_get_account_balance(account_id)
-                except EnableBankingAuthError:
-                    raise
-                except (EnableBankingError, UpdateFailed) as err:
+            for account_id, outcome in zip(valid_account_ids, outcomes, strict=True):
+                if isinstance(outcome, EnableBankingAuthError):
+                    raise outcome
+                if isinstance(outcome, (EnableBankingError, UpdateFailed)):
                     failures += 1
                     LOGGER.warning(
                         "Unable to update bank account %s: %s",
                         stable_account_id(account_id)[:12],
-                        err,
+                        outcome,
                     )
                     continue
-                if account:
-                    result[account.stable_id] = account
+                if isinstance(outcome, BaseException):
+                    raise outcome
+                if outcome:
+                    result[outcome.stable_id] = outcome
             if failures and not result:
                 raise UpdateFailed("Unable to update any bank account")
             return result

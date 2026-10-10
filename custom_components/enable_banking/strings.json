@@ -13,7 +13,7 @@
       },
       "bank": {
         "title": "Choose a bank",
-        "description": "Choose the bank and how long access should be requested. The bank may enforce a shorter period.",
+        "description": "Choose the bank and how long access should be requested. Consent explicitly includes balances and transactions so transaction sensors can be enabled later without another authorization. Transaction retrieval remains disabled until configured in the integration options. The bank may enforce a shorter consent period.",
         "data": {
           "aspsp_name": "Bank",
           "psu_type": "Customer type",
@@ -45,6 +45,7 @@
       "cannot_connect": "Unable to connect to Enable Banking",
       "invalid_auth": "The application ID or private key is invalid",
       "no_banks": "Enable Banking returned no banks for this country",
+      "unsupported_psu_type": "The selected bank does not support this customer type",
       "unknown": "Unexpected response from Enable Banking"
     },
     "abort": {

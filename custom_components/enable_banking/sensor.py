@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -27,12 +27,24 @@ async def async_setup_entry(
 ) -> None:
     """Set up account balance sensors."""
     coordinator: EnableBankingCoordinator = hass.data[DOMAIN][entry.entry_id]
-    entities: list[SensorEntity] = []
-    for account_key in coordinator.data:
-        entities.append(EnableBankingBalanceSensor(coordinator, account_key))
-        if coordinator.transaction_count:
-            entities.append(EnableBankingTransactionsSensor(coordinator, account_key))
-    async_add_entities(entities)
+    known_accounts: set[str] = set()
+
+    @callback
+    def async_add_missing_entities() -> None:
+        """Add entities for accounts first observed after platform setup."""
+        entities: list[SensorEntity] = []
+        for account_key in coordinator.data.keys() - known_accounts:
+            known_accounts.add(account_key)
+            entities.append(EnableBankingBalanceSensor(coordinator, account_key))
+            if coordinator.transaction_count:
+                entities.append(
+                    EnableBankingTransactionsSensor(coordinator, account_key)
+                )
+        if entities:
+            async_add_entities(entities)
+
+    async_add_missing_entities()
+    entry.async_on_unload(coordinator.async_add_listener(async_add_missing_entities))
 
 
 class EnableBankingBalanceSensor(

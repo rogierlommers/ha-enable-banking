@@ -1,8 +1,10 @@
 """Tests for balance selection."""
 
-from datetime import timedelta
+import asyncio
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -19,6 +21,7 @@ from custom_components.enable_banking.const import (
     DATA_REAUTH_REASONS,
     DOMAIN,
     REAUTH_REASON_APPLICATION,
+    TRANSACTION_LOOKBACK_OPTIONS,
 )
 from custom_components.enable_banking.coordinator import (
     EnableBankingCoordinator,
@@ -116,6 +119,23 @@ def test_coordinator_uses_refresh_and_transaction_options(
     assert coordinator.transaction_lookback_days == 30
 
 
+@pytest.mark.parametrize("lookback_days", TRANSACTION_LOOKBACK_OPTIONS)
+def test_coordinator_accepts_every_canonical_lookback(
+    hass: HomeAssistant, lookback_days: int
+) -> None:
+    """Coordinator validation stays aligned with the options selector."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={},
+        options={CONF_TRANSACTION_LOOKBACK_DAYS: lookback_days},
+    )
+    entry.add_to_hass(hass)
+
+    coordinator = EnableBankingCoordinator(hass, entry, MagicMock())
+
+    assert coordinator.transaction_lookback_days == lookback_days
+
+
 async def test_transaction_failure_keeps_balance_update_available(
     hass: HomeAssistant,
 ) -> None:
@@ -150,13 +170,17 @@ async def test_transaction_failure_keeps_balance_update_available(
     )
     coordinator = EnableBankingCoordinator(hass, entry, api)
 
-    await coordinator.async_refresh()
+    with patch("custom_components.enable_banking.coordinator.datetime") as clock:
+        clock.now.return_value = datetime(2026, 10, 10, tzinfo=UTC)
+        await coordinator.async_refresh()
 
     assert coordinator.last_update_success is True
     account = next(iter(coordinator.data.values()))
     assert account.amount.is_finite()
     assert account.transactions is None
-    assert api.async_get_transactions.await_args.kwargs["date_from"] is not None
+    assert api.async_get_transactions.await_args.kwargs["date_from"].isoformat() == (
+        "2026-07-12"
+    )
 
 
 async def test_one_account_failure_keeps_other_balance_available(
@@ -226,3 +250,51 @@ async def test_application_auth_failure_records_credential_reauth_reason(
     assert hass.data[DOMAIN][DATA_REAUTH_REASONS][entry.entry_id] == (
         REAUTH_REASON_APPLICATION
     )
+
+
+async def test_accounts_are_fetched_with_bounded_concurrency(
+    hass: HomeAssistant,
+) -> None:
+    """A slow account does not serialize every other account request."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+    )
+    entry.add_to_hass(hass)
+    api = MagicMock()
+    api.async_get_session = AsyncMock(
+        return_value={"status": "AUTHORIZED", "accounts": ["one", "two"]}
+    )
+    both_started = asyncio.Event()
+    active_requests = 0
+    maximum_active = 0
+
+    async def async_details(account_id: str) -> dict:
+        nonlocal active_requests, maximum_active
+        active_requests += 1
+        maximum_active = max(maximum_active, active_requests)
+        if active_requests == 2:
+            both_started.set()
+        await asyncio.wait_for(both_started.wait(), timeout=1)
+        active_requests -= 1
+        return {
+            "identification_hash": f"hash-{account_id}",
+            "name": account_id,
+            "currency": "EUR",
+        }
+
+    api.async_get_account_details = AsyncMock(side_effect=async_details)
+    api.async_get_balances = AsyncMock(
+        return_value=[
+            {
+                "balance_type": "ITAV",
+                "balance_amount": {"amount": "1.00", "currency": "EUR"},
+            }
+        ]
+    )
+    coordinator = EnableBankingCoordinator(hass, entry, api)
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is True
+    assert maximum_active == 2

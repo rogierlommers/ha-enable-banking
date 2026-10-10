@@ -132,6 +132,57 @@ async def test_rejects_callback_with_wrong_state(hass: HomeAssistant) -> None:
 
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "invalid_state"
+    assert hass.data[DOMAIN][DATA_PENDING_FLOWS] == {}
+
+
+async def test_bank_rejects_unsupported_customer_type(hass: HomeAssistant) -> None:
+    """ASPSP customer-type metadata prevents invalid authorization requests."""
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_validate_application",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_get_aspsps",
+            new=AsyncMock(
+                return_value=[{"name": "Business Bank", "psu_types": ["business"]}]
+            ),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_APPLICATION_ID: "application-id",
+                CONF_PRIVATE_KEY: "private-key",
+                CONF_COUNTRY: "NL",
+            },
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_ASPSP_NAME: "Business Bank",
+                CONF_PSU_TYPE: "personal",
+                CONF_CONSENT_DAYS: 90,
+            },
+        )
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "bank"
+    assert result["errors"] == {CONF_PSU_TYPE: "unsupported_psu_type"}
 
 
 async def test_options_flow_updates_polling_and_transaction_count(
@@ -141,12 +192,18 @@ async def test_options_flow_updates_polling_and_transaction_count(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
-        options={CONF_REFRESH_INTERVAL: 60, CONF_TRANSACTION_COUNT: 0},
+        options={
+            CONF_REFRESH_INTERVAL: 60,
+            CONF_TRANSACTION_COUNT: 0,
+            CONF_TRANSACTION_LOOKBACK_DAYS: 7,
+        },
     )
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is data_entry_flow.FlowResultType.FORM
+    untouched_defaults = result["data_schema"]({})
+    assert untouched_defaults[CONF_TRANSACTION_LOOKBACK_DAYS] == 7
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
