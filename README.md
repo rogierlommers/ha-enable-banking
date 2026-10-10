@@ -10,12 +10,17 @@ Balance sensors opt in to Home Assistant long-term statistics, so their history
 is available to History cards, statistics graphs, and automations without a
 separate history database.
 
+Example sensor usage:
+- [Alert if balance is low](docs/alert_if_low_balance.md)
+- [Receive daily account overview](docs/daily_account_overview.md)
+- [apexcharts-card visualisation of balances](docs/apexcharts-card-overview.md)
+
 ## Requirements
 
 - Home Assistant 2025.1 or newer.
 - HACS.
 - An [Enable Banking](https://enablebanking.com/cp) application and its RSA
-  private key (see below for detailed instructions).
+  private key (see [below](#enable-banking-application-field-guide) for detailed instructions).
 - A publicly reachable HTTPS Home Assistant external URL, such as a Home
   Assistant Cloud URL.
 
@@ -106,23 +111,8 @@ aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee.pem
 
 Keep this file private and backed up securely. Open it in a text editor and
 paste its complete contents—including the `BEGIN` and `END` lines—into the
-**Private RSA key (PEM)** field in Home Assistant. Do not commit it to this
-repository, upload it to a public location, or share it. Enable Banking cannot
+**Private RSA key (PEM)** field in Home Assistant. Enable Banking cannot
 reconstruct the private key if it is lost.
-
-The alternative **Generate outside the browser and import public certificate**
-is intended for advanced users who manage their own key material. For example:
-
-```bash
-openssl genrsa -out enable-banking-private.pem 4096
-openssl req -new -x509 -days 365 \
-  -key enable-banking-private.pem \
-  -out enable-banking-public.crt \
-  -subj "/C=NL/O=Home Assistant/CN=home.example.com"
-```
-
-Upload only `enable-banking-public.crt` to Enable Banking. Paste the contents of
-`enable-banking-private.pem` into Home Assistant. Never upload the private key.
 
 #### 3. Application information
 
@@ -131,7 +121,7 @@ email addresses with values you control.
 
 | Enable Banking field | What to enter | Example |
 | --- | --- | --- |
-| **Application name** | A recognizable name. This may be shown by Enable Banking during bank consent. | `Home Assistant – Personal banking` |
+| **Application name** | A recognizable name. This may be shown by Enable Banking during bank consent. | `Home Assistant - Personal banking` |
 | **Allowed redirect URLs (one per line)** | The exact public HTTPS Home Assistant callback URL. Add one URL per line if you have more than one explicitly supported external hostname. Do not add a trailing slash. | `https://your-id.ui.nabu.casa/api/enable_banking/callback` |
 | **Application description** | A short, accurate explanation of the read-only integration. Required for production applications. | `Read-only Home Assistant integration that retrieves my account names, balances, and optionally recent transactions for local dashboards and history.` |
 | **Email for data protection matters** | A monitored email address for privacy or data-protection questions. Required for production applications. | `privacy@example.com` |
@@ -233,12 +223,6 @@ transactions from the configured lookback date, follows at most five API pages,
 sorts usable results by date, and exposes the newest configured number. A bank
 may return fewer transactions because of consent, account type, API history
 limits, or unavailable fields.
-
-Version 0.2.1 and later explicitly requests consent for both balances and
-transactions. Existing installations created with an earlier version should
-open the Enable Banking integration's three-dot menu, choose **Reconfigure**,
-and complete bank authorization again. This renews the session without deleting
-the integration or its entities.
 
 ### Recent transaction sensors
 
