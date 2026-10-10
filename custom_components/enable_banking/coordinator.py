@@ -14,13 +14,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import EnableBankingApi, EnableBankingAuthError, EnableBankingError
+from .api import (
+    EnableBankingApi,
+    EnableBankingApplicationAuthError,
+    EnableBankingAuthError,
+    EnableBankingError,
+)
 from .const import (
     CONF_ASPSP_NAME,
     CONF_REFRESH_INTERVAL,
     CONF_SESSION_ID,
     CONF_TRANSACTION_COUNT,
     CONF_TRANSACTION_LOOKBACK_DAYS,
+    DATA_REAUTH_REASONS,
     DEFAULT_REFRESH_INTERVAL,
     DEFAULT_TRANSACTION_COUNT,
     DEFAULT_TRANSACTION_LOOKBACK_DAYS,
@@ -28,6 +34,7 @@ from .const import (
     MAX_REFRESH_INTERVAL,
     MAX_TRANSACTION_COUNT,
     MIN_REFRESH_INTERVAL,
+    REAUTH_REASON_APPLICATION,
 )
 
 BALANCE_PRIORITY = ("ITAV", "CLAV", "ITBD", "CLBD")
@@ -297,12 +304,32 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
                 raise UpdateFailed("Enable Banking returned invalid session data")
 
             result: dict[str, AccountBalance] = {}
+            failures = 0
             for account_id in account_ids:
                 if not isinstance(account_id, str):
                     continue
-                if account := await self._async_get_account_balance(account_id):
+                try:
+                    account = await self._async_get_account_balance(account_id)
+                except EnableBankingAuthError:
+                    raise
+                except (EnableBankingError, UpdateFailed) as err:
+                    failures += 1
+                    LOGGER.warning(
+                        "Unable to update bank account %s: %s",
+                        stable_account_id(account_id)[:12],
+                        err,
+                    )
+                    continue
+                if account:
                     result[account.stable_id] = account
+            if failures and not result:
+                raise UpdateFailed("Unable to update any bank account")
             return result
+        except EnableBankingApplicationAuthError as err:
+            self.hass.data.setdefault(DOMAIN, {}).setdefault(DATA_REAUTH_REASONS, {})[
+                self.config_entry.entry_id
+            ] = REAUTH_REASON_APPLICATION
+            raise ConfigEntryAuthFailed from err
         except EnableBankingAuthError as err:
             raise ConfigEntryAuthFailed from err
         except EnableBankingError as err:

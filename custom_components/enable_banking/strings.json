@@ -28,6 +28,14 @@
         "title": "Renew bank consent",
         "description": "The bank consent expired or was revoked. Continue to authorize access again."
       },
+      "reauth_credentials": {
+        "title": "Update Enable Banking application credentials",
+        "description": "Enable Banking rejected the stored application credentials. Enter a valid application ID and private RSA key before renewing bank consent.",
+        "data": {
+          "application_id": "Application ID",
+          "private_key": "Private RSA key (PEM)"
+        }
+      },
       "reconfigure": {
         "title": "Renew bank consent",
         "description": "Continue to authorize the bank again. This renews consent and explicitly requests access to balances and transactions."
@@ -57,7 +65,7 @@
     "step": {
       "init": {
         "title": "Enable Banking options",
-        "description": "Choose how often account data is refreshed, how many recent transactions are exposed per account, and how far back to search. Set recent transactions to 0 to disable transaction retrieval. Transaction summaries are stored in sensor attributes and may be retained by Home Assistant's recorder.",
+        "description": "Choose how often account data is refreshed, how many recent transactions are exposed per account, and how far back to search. Set recent transactions to 0 to disable transaction retrieval. Transaction summaries are stored in sensor attributes, may be retained by Home Assistant's recorder, and can be read by authenticated Home Assistant users who have access to entity states. Hiding a dashboard card is not an access-control boundary.",
         "data": {
           "refresh_interval": "Refresh interval (minutes)",
           "transaction_count": "Recent transactions per account",

@@ -66,7 +66,14 @@ class EnableBankingCallbackView(HomeAssistantView):
                 flow_id, user_input=user_input
             )
         except UnknownFlow:
-            return web.Response(text="Authorization request expired", status=400)
+            return web.Response(
+                text="Authorization request expired",
+                status=400,
+                headers={
+                    "Cache-Control": "no-store",
+                    "Referrer-Policy": "no-referrer",
+                },
+            )
 
         return web.Response(
             text=(

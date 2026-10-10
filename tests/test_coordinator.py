@@ -1,19 +1,24 @@
 """Tests for balance selection."""
 
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.enable_banking.api import EnableBankingError
+from custom_components.enable_banking.api import (
+    EnableBankingApplicationAuthError,
+    EnableBankingError,
+)
 from custom_components.enable_banking.const import (
     CONF_ASPSP_NAME,
     CONF_REFRESH_INTERVAL,
     CONF_SESSION_ID,
     CONF_TRANSACTION_COUNT,
     CONF_TRANSACTION_LOOKBACK_DAYS,
+    DATA_REAUTH_REASONS,
     DOMAIN,
+    REAUTH_REASON_APPLICATION,
 )
 from custom_components.enable_banking.coordinator import (
     EnableBankingCoordinator,
@@ -152,3 +157,72 @@ async def test_transaction_failure_keeps_balance_update_available(
     assert account.amount.is_finite()
     assert account.transactions is None
     assert api.async_get_transactions.await_args.kwargs["date_from"] is not None
+
+
+async def test_one_account_failure_keeps_other_balance_available(
+    hass: HomeAssistant,
+) -> None:
+    """A broken account does not make healthy account balances unavailable."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+    )
+    entry.add_to_hass(hass)
+    api = MagicMock()
+    api.async_get_session = AsyncMock(
+        return_value={
+            "status": "AUTHORIZED",
+            "accounts": ["broken-account", "healthy-account"],
+        }
+    )
+    api.async_get_account_details = AsyncMock(
+        side_effect=[
+            EnableBankingError("Account unavailable"),
+            {
+                "identification_hash": "healthy-account-hash",
+                "name": "Healthy account",
+                "currency": "EUR",
+            },
+        ]
+    )
+    api.async_get_balances = AsyncMock(
+        return_value=[
+            {
+                "balance_type": "ITAV",
+                "balance_amount": {"amount": "42.00", "currency": "EUR"},
+            }
+        ]
+    )
+    coordinator = EnableBankingCoordinator(hass, entry, api)
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is True
+    assert [account.name for account in coordinator.data.values()] == [
+        "Healthy account"
+    ]
+
+
+async def test_application_auth_failure_records_credential_reauth_reason(
+    hass: HomeAssistant,
+) -> None:
+    """Application JWT failures route to the credential replacement flow."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+    )
+    entry.add_to_hass(hass)
+    api = MagicMock()
+    api.async_get_session = AsyncMock(
+        side_effect=EnableBankingApplicationAuthError("Invalid application")
+    )
+    coordinator = EnableBankingCoordinator(hass, entry, api)
+
+    with patch.object(entry, "async_start_reauth") as start_reauth:
+        await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is False
+    start_reauth.assert_called_once()
+    assert hass.data[DOMAIN][DATA_REAUTH_REASONS][entry.entry_id] == (
+        REAUTH_REASON_APPLICATION
+    )
