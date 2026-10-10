@@ -13,7 +13,7 @@
       },
       "bank": {
         "title": "Kies een bank",
-        "description": "Kies de bank en hoelang toegang moet worden aangevraagd. De bank kan een kortere periode hanteren.",
+        "description": "Kies de bank en hoelang toegang moet worden aangevraagd. De toestemming omvat expliciet saldi en transacties, zodat transactiesensoren later zonder nieuwe autorisatie kunnen worden ingeschakeld. Transacties worden pas opgehaald nadat dit in de integratieopties is ingesteld. De bank kan een kortere toestemmingsperiode hanteren.",
         "data": {
           "aspsp_name": "Bank",
           "psu_type": "Type klant",
@@ -45,6 +45,7 @@
       "cannot_connect": "Kan geen verbinding maken met Enable Banking",
       "invalid_auth": "Het applicatie-ID of de privésleutel is ongeldig",
       "no_banks": "Enable Banking heeft geen banken voor dit land teruggegeven",
+      "unsupported_psu_type": "De geselecteerde bank ondersteunt dit type klant niet",
       "unknown": "Onverwacht antwoord van Enable Banking"
     },
     "abort": {

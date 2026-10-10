@@ -104,7 +104,12 @@ class EnableBankingApi:
                     raise EnableBankingError(
                         f"Enable Banking request failed ({response.status})"
                     )
-                payload = await response.json()
+                try:
+                    payload = await response.json()
+                except (aiohttp.ContentTypeError, ValueError) as err:
+                    raise EnableBankingError(
+                        "Enable Banking returned invalid data"
+                    ) from err
                 if not isinstance(payload, dict):
                     raise EnableBankingError("Enable Banking returned invalid data")
                 return payload
@@ -195,14 +200,14 @@ class EnableBankingApi:
         *,
         date_from: date,
     ) -> list[dict[str, Any]]:
-        """Fetch transaction pages until the requested number is available."""
+        """Fetch bounded transaction pages for later normalization and truncation."""
         if limit <= 0:
             return []
 
         transactions: list[dict[str, Any]] = []
         continuation_key: str | None = None
         for _page in range(MAX_TRANSACTION_PAGES):
-            params = {"date_from": date_from.isoformat(), "strategy": "default"}
+            params = {"date_from": date_from.isoformat(), "strategy": "longest"}
             if continuation_key:
                 params["continuation_key"] = continuation_key
             payload = await self._request(
@@ -216,8 +221,6 @@ class EnableBankingApi:
                     "Enable Banking returned invalid transaction data"
                 )
             transactions.extend(item for item in page if isinstance(item, dict))
-            if len(transactions) >= limit:
-                break
             continuation_key = payload.get("continuation_key")
             if not isinstance(continuation_key, str) or not continuation_key:
                 break

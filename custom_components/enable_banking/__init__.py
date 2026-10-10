@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from time import monotonic
 from typing import Any
 
 from aiohttp import web
@@ -21,11 +23,56 @@ from .const import (
     DATA_CALLBACK_REGISTERED,
     DATA_PENDING_FLOWS,
     DOMAIN,
+    PENDING_FLOW_TTL_SECONDS,
 )
 from .coordinator import EnableBankingCoordinator
 
 PLATFORMS = [Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+@dataclass(frozen=True, slots=True)
+class PendingFlow:
+    """One expiring external authorization flow."""
+
+    flow_id: str
+    expires_at: float
+
+
+@callback
+def _async_pending_flows(hass: HomeAssistant) -> dict[str, PendingFlow]:
+    """Return pending flows after pruning expired records."""
+    pending: dict[str, PendingFlow] = hass.data.setdefault(DOMAIN, {}).setdefault(
+        DATA_PENDING_FLOWS, {}
+    )
+    now = monotonic()
+    for state, record in list(pending.items()):
+        if record.expires_at <= now:
+            pending.pop(state, None)
+    return pending
+
+
+@callback
+def async_register_pending_flow(hass: HomeAssistant, state: str, flow_id: str) -> None:
+    """Register a one-time authorization state with an expiry."""
+    _async_pending_flows(hass)[state] = PendingFlow(
+        flow_id=flow_id,
+        expires_at=monotonic() + PENDING_FLOW_TTL_SECONDS,
+    )
+
+
+@callback
+def async_remove_pending_flow(hass: HomeAssistant, state: str | None) -> None:
+    """Remove one pending authorization state."""
+    if state is not None:
+        _async_pending_flows(hass).pop(state, None)
+
+
+@callback
+def async_pop_pending_flow(hass: HomeAssistant, state: str) -> str | None:
+    """Consume one unexpired authorization state."""
+    record = _async_pending_flows(hass).pop(state, None)
+    return record.flow_id if record else None
 
 
 async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -44,8 +91,7 @@ class EnableBankingCallbackView(HomeAssistantView):
         """Pass a one-time callback to its active config flow."""
         hass: HomeAssistant = request.app[KEY_HASS]
         state = request.query.get("state", "")
-        pending: dict[str, str] = hass.data[DOMAIN][DATA_PENDING_FLOWS]
-        flow_id = pending.pop(state, None)
+        flow_id = async_pop_pending_flow(hass, state)
         if flow_id is None:
             return web.Response(
                 text="Invalid or expired authorization request",

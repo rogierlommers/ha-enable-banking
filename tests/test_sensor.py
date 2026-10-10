@@ -3,6 +3,10 @@
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.enable_banking.const import DOMAIN
 from custom_components.enable_banking.coordinator import (
     AccountBalance,
     TransactionSummary,
@@ -10,6 +14,7 @@ from custom_components.enable_banking.coordinator import (
 from custom_components.enable_banking.sensor import (
     EnableBankingBalanceSensor,
     EnableBankingTransactionsSensor,
+    async_setup_entry,
 )
 
 
@@ -124,3 +129,54 @@ def test_transactions_sensor_is_unavailable_after_transaction_fetch_failure() ->
     assert sensor.available is False
     assert sensor.native_value is None
     assert sensor.extra_state_attributes == {}
+
+
+async def test_platform_adds_accounts_seen_after_initial_setup(
+    hass: HomeAssistant,
+) -> None:
+    """Coordinator updates create entities for newly discovered accounts."""
+    first = AccountBalance(
+        account_id="account-one",
+        stable_id="stable-one",
+        name="First account",
+        currency="EUR",
+        amount=Decimal("1.00"),
+        balance_type="ITAV",
+        balance_name="Available",
+        last_changed=None,
+        transactions=(),
+    )
+    second = AccountBalance(
+        account_id="account-two",
+        stable_id="stable-two",
+        name="Second account",
+        currency="EUR",
+        amount=Decimal("2.00"),
+        balance_type="ITAV",
+        balance_name="Available",
+        last_changed=None,
+        transactions=(),
+    )
+    coordinator = MagicMock()
+    coordinator.data = {first.stable_id: first}
+    coordinator.transaction_count = 0
+    coordinator.bank_name = "Example Bank"
+    listeners = []
+    coordinator.async_add_listener.side_effect = lambda listener: (
+        listeners.append(listener) or MagicMock()
+    )
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+    added = []
+
+    await async_setup_entry(hass, entry, added.extend)
+    assert [entity.unique_id for entity in added] == ["stable-one_balance"]
+
+    coordinator.data[second.stable_id] = second
+    listeners[0]()
+
+    assert [entity.unique_id for entity in added] == [
+        "stable-one_balance",
+        "stable-two_balance",
+    ]
