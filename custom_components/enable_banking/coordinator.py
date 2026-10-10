@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -20,8 +20,10 @@ from .const import (
     CONF_REFRESH_INTERVAL,
     CONF_SESSION_ID,
     CONF_TRANSACTION_COUNT,
+    CONF_TRANSACTION_LOOKBACK_DAYS,
     DEFAULT_REFRESH_INTERVAL,
     DEFAULT_TRANSACTION_COUNT,
+    DEFAULT_TRANSACTION_LOOKBACK_DAYS,
     DOMAIN,
     MAX_REFRESH_INTERVAL,
     MAX_TRANSACTION_COUNT,
@@ -197,6 +199,17 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
                 ),
             ),
         )
+        configured_lookback = int(
+            entry.options.get(
+                CONF_TRANSACTION_LOOKBACK_DAYS,
+                DEFAULT_TRANSACTION_LOOKBACK_DAYS,
+            )
+        )
+        self.transaction_lookback_days = (
+            configured_lookback
+            if configured_lookback in {7, 30, 90, 365}
+            else DEFAULT_TRANSACTION_LOOKBACK_DAYS
+        )
         self._account_details: dict[str, dict[str, Any]] = {}
 
     async def _async_get_account_balance(
@@ -237,7 +250,10 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
                 summaries = [
                     summary
                     for transaction in await self.api.async_get_transactions(
-                        account_id, self.transaction_count
+                        account_id,
+                        self.transaction_count,
+                        date_from=datetime.now(tz=UTC).date()
+                        - timedelta(days=self.transaction_lookback_days),
                     )
                     if (summary := normalize_transaction(transaction)) is not None
                 ]

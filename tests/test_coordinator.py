@@ -12,6 +12,7 @@ from custom_components.enable_banking.const import (
     CONF_REFRESH_INTERVAL,
     CONF_SESSION_ID,
     CONF_TRANSACTION_COUNT,
+    CONF_TRANSACTION_LOOKBACK_DAYS,
     DOMAIN,
 )
 from custom_components.enable_banking.coordinator import (
@@ -95,7 +96,11 @@ def test_coordinator_uses_refresh_and_transaction_options(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={},
-        options={CONF_REFRESH_INTERVAL: 30, CONF_TRANSACTION_COUNT: 5},
+        options={
+            CONF_REFRESH_INTERVAL: 30,
+            CONF_TRANSACTION_COUNT: 5,
+            CONF_TRANSACTION_LOOKBACK_DAYS: 30,
+        },
     )
     entry.add_to_hass(hass)
 
@@ -103,6 +108,7 @@ def test_coordinator_uses_refresh_and_transaction_options(
 
     assert coordinator.update_interval == timedelta(minutes=30)
     assert coordinator.transaction_count == 5
+    assert coordinator.transaction_lookback_days == 30
 
 
 async def test_transaction_failure_keeps_balance_update_available(
@@ -145,3 +151,4 @@ async def test_transaction_failure_keeps_balance_update_available(
     account = next(iter(coordinator.data.values()))
     assert account.amount.is_finite()
     assert account.transactions is None
+    assert api.async_get_transactions.await_args.kwargs["date_from"] is not None

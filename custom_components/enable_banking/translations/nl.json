@@ -27,6 +27,10 @@
       "reauth_confirm": {
         "title": "Toestemming voor de bank vernieuwen",
         "description": "De toestemming voor de bank is verlopen of ingetrokken. Ga verder om de toegang opnieuw te autoriseren."
+      },
+      "reconfigure": {
+        "title": "Toestemming voor de bank vernieuwen",
+        "description": "Ga verder om de bank opnieuw te autoriseren. Hiermee wordt de toestemming vernieuwd en wordt expliciet toegang tot saldi en transacties aangevraagd."
       }
     },
     "error": {
@@ -45,6 +49,7 @@
       "invalid_state": "Het autorisatieantwoord hoort niet bij deze configuratieaanvraag",
       "missing_code": "De bank heeft geen autorisatiecode teruggegeven",
       "reauth_successful": "De toestemming voor de bank is vernieuwd",
+      "reconfigure_successful": "De toestemming voor de bank is vernieuwd",
       "unknown": "Onverwacht antwoord van Enable Banking"
     }
   },
@@ -52,10 +57,11 @@
     "step": {
       "init": {
         "title": "Opties voor Enable Banking",
-        "description": "Kies hoe vaak rekeninggegevens worden vernieuwd en hoeveel recente transacties per rekening worden getoond. Stel recente transacties in op 0 om het ophalen van transacties uit te schakelen. Transactieoverzichten worden opgeslagen in sensorattributen en kunnen door de recorder van Home Assistant worden bewaard.",
+        "description": "Kies hoe vaak rekeninggegevens worden vernieuwd, hoeveel recente transacties per rekening worden getoond en hoe ver er wordt teruggekeken. Stel recente transacties in op 0 om het ophalen van transacties uit te schakelen. Transactieoverzichten worden opgeslagen in sensorattributen en kunnen door de recorder van Home Assistant worden bewaard.",
         "data": {
           "refresh_interval": "Vernieuwingsinterval (minuten)",
-          "transaction_count": "Recente transacties per rekening"
+          "transaction_count": "Recente transacties per rekening",
+          "transaction_lookback_days": "Terugkijkperiode voor transacties (dagen)"
         }
       }
     }

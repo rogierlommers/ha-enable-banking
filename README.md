@@ -12,12 +12,12 @@ separate history database.
 
 ## Requirements
 
-- Home Assistant 2025.1 or newer
-- HACS
+- Home Assistant 2025.1 or newer.
+- HACS.
 - An [Enable Banking](https://enablebanking.com/cp) application and its RSA
-  private key
+  private key (see below for detailed instructions).
 - A publicly reachable HTTPS Home Assistant external URL, such as a Home
-  Assistant Cloud URL
+  Assistant Cloud URL.
 
 This integration reads account information only. Recent transaction retrieval
 is disabled by default and can be enabled in the integration options. The
@@ -222,9 +222,23 @@ to change:
 - **Recent transactions per account** — how many transaction summaries to
   expose for each account. The allowed range is 0 to 20, and the default is 0.
   Set this to 0 to disable transaction API requests and transaction sensors.
+- **Transaction lookback period** — how far back Enable Banking should search
+  for transactions. Choose 7, 30, 90, or 365 days. The default is 90 days.
 
 Saving options reloads the integration so the new polling interval and entities
 take effect immediately.
+
+The transaction count is a maximum, not a guarantee. The integration requests
+transactions from the configured lookback date, follows at most five API pages,
+sorts usable results by date, and exposes the newest configured number. A bank
+may return fewer transactions because of consent, account type, API history
+limits, or unavailable fields.
+
+Version 0.2.1 and later explicitly requests consent for both balances and
+transactions. Existing installations created with an earlier version should
+open the Enable Banking integration's three-dot menu, choose **Reconfigure**,
+and complete bank authorization again. This renews the session without deleting
+the integration or its entities.
 
 ### Recent transaction sensors
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -128,7 +128,11 @@ class EnableBankingApi:
             "POST",
             "/auth",
             json={
-                "access": {"valid_until": valid_until.isoformat()},
+                "access": {
+                    "balances": True,
+                    "transactions": True,
+                    "valid_until": valid_until.isoformat(),
+                },
                 "aspsp": {"name": aspsp_name, "country": country.upper()},
                 "state": state,
                 "redirect_url": redirect_url,
@@ -163,7 +167,11 @@ class EnableBankingApi:
         return [item for item in balances if isinstance(item, dict)]
 
     async def async_get_transactions(
-        self, account_id: str, limit: int
+        self,
+        account_id: str,
+        limit: int,
+        *,
+        date_from: date,
     ) -> list[dict[str, Any]]:
         """Fetch transaction pages until the requested number is available."""
         if limit <= 0:
@@ -172,9 +180,9 @@ class EnableBankingApi:
         transactions: list[dict[str, Any]] = []
         continuation_key: str | None = None
         for _page in range(MAX_TRANSACTION_PAGES):
-            params = (
-                {"continuation_key": continuation_key} if continuation_key else None
-            )
+            params = {"date_from": date_from.isoformat(), "strategy": "default"}
+            if continuation_key:
+                params["continuation_key"] = continuation_key
             payload = await self._request(
                 "GET",
                 f"/accounts/{account_id}/transactions",

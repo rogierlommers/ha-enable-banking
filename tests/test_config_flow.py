@@ -14,7 +14,9 @@ from custom_components.enable_banking.const import (
     CONF_PRIVATE_KEY,
     CONF_PSU_TYPE,
     CONF_REFRESH_INTERVAL,
+    CONF_SESSION_ID,
     CONF_TRANSACTION_COUNT,
+    CONF_TRANSACTION_LOOKBACK_DAYS,
     DATA_PENDING_FLOWS,
     DOMAIN,
 )
@@ -146,11 +148,66 @@ async def test_options_flow_updates_polling_and_transaction_count(
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
-        user_input={CONF_REFRESH_INTERVAL: 30, CONF_TRANSACTION_COUNT: 5},
+        user_input={
+            CONF_REFRESH_INTERVAL: 30,
+            CONF_TRANSACTION_COUNT: 5,
+            CONF_TRANSACTION_LOOKBACK_DAYS: "90",
+        },
     )
 
     assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.options == {
         CONF_REFRESH_INTERVAL: 30,
         CONF_TRANSACTION_COUNT: 5,
+        CONF_TRANSACTION_LOOKBACK_DAYS: 90,
     }
+
+
+async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
+    """Existing users can renew consent after transaction access changes."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="application-id:NL:Example Bank:personal",
+        data={
+            CONF_APPLICATION_ID: "application-id",
+            CONF_PRIVATE_KEY: "private-key",
+            CONF_COUNTRY: "NL",
+            CONF_ASPSP_NAME: "Example Bank",
+            CONF_PSU_TYPE: "personal",
+            CONF_CONSENT_DAYS: 90,
+            CONF_SESSION_ID: "old-session-id",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_RECONFIGURE,
+                "entry_id": entry.entry_id,
+            },
+        )
+        assert result["type"] is data_entry_flow.FlowResultType.FORM
+        assert result["step_id"] == "reconfigure"
+
+        with patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_start_authorization",
+            new=AsyncMock(return_value="https://bank.example/authorize"),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"], user_input={}
+            )
+
+    assert result["type"] is data_entry_flow.FlowResultType.EXTERNAL_STEP

@@ -32,15 +32,18 @@ from .const import (
     CONF_REFRESH_INTERVAL,
     CONF_SESSION_ID,
     CONF_TRANSACTION_COUNT,
+    CONF_TRANSACTION_LOOKBACK_DAYS,
     DATA_PENDING_FLOWS,
     DEFAULT_CONSENT_DAYS,
     DEFAULT_PSU_TYPE,
     DEFAULT_REFRESH_INTERVAL,
     DEFAULT_TRANSACTION_COUNT,
+    DEFAULT_TRANSACTION_LOOKBACK_DAYS,
     DOMAIN,
     MAX_REFRESH_INTERVAL,
     MAX_TRANSACTION_COUNT,
     MIN_REFRESH_INTERVAL,
+    TRANSACTION_LOOKBACK_OPTIONS,
 )
 
 
@@ -58,6 +61,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._session: dict[str, Any] | None = None
         self._authorization_error: str | None = None
         self._reauth_entry: ConfigEntry | None = None
+        self._reconfigure_entry: ConfigEntry | None = None
 
     def _callback_url(self) -> str:
         base_url = get_url(
@@ -193,6 +197,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self._async_external_error("unknown")
             return self.async_external_step_done(next_step_id="finish")
 
+        async_ensure_callback_registered(self.hass)
         self._state = secrets.token_urlsafe(32)
         self.hass.data[DOMAIN][DATA_PENDING_FLOWS][self._state] = self.flow_id
         valid_until = datetime.now(tz=UTC) + timedelta(
@@ -249,6 +254,12 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._reauth_entry,
                 data_updates=self._data,
             )
+        if self._reconfigure_entry is not None:
+            self._abort_if_unique_id_mismatch()
+            return self.async_update_reload_and_abort(
+                self._reconfigure_entry,
+                data_updates=self._data,
+            )
         self._abort_if_unique_id_configured()
         return self.async_create_entry(title=title, data=self._data)
 
@@ -267,6 +278,17 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id="reauth_confirm", data_schema=vol.Schema({})
         )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Renew bank consent for an existing config entry."""
+        if self._reconfigure_entry is None:
+            self._reconfigure_entry = self._get_reconfigure_entry()
+            self._data = dict(self._reconfigure_entry.data)
+        if user_input is not None:
+            return await self.async_step_authorize()
+        return self.async_show_form(step_id="reconfigure", data_schema=vol.Schema({}))
 
     @staticmethod
     @callback
@@ -323,6 +345,23 @@ class EnableBankingOptionsFlow(config_entries.OptionsFlow):
                                 max=MAX_TRANSACTION_COUNT,
                                 step=1,
                                 mode=selector.NumberSelectorMode.BOX,
+                            )
+                        ),
+                        vol.Coerce(int),
+                    ),
+                    vol.Required(
+                        CONF_TRANSACTION_LOOKBACK_DAYS,
+                        default=self._config_entry.options.get(
+                            CONF_TRANSACTION_LOOKBACK_DAYS,
+                            DEFAULT_TRANSACTION_LOOKBACK_DAYS,
+                        ),
+                    ): vol.All(
+                        selector.SelectSelector(
+                            selector.SelectSelectorConfig(
+                                options=[
+                                    str(value) for value in TRANSACTION_LOOKBACK_OPTIONS
+                                ],
+                                mode=selector.SelectSelectorMode.DROPDOWN,
                             )
                         ),
                         vol.Coerce(int),

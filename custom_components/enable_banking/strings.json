@@ -27,6 +27,10 @@
       "reauth_confirm": {
         "title": "Renew bank consent",
         "description": "The bank consent expired or was revoked. Continue to authorize access again."
+      },
+      "reconfigure": {
+        "title": "Renew bank consent",
+        "description": "Continue to authorize the bank again. This renews consent and explicitly requests access to balances and transactions."
       }
     },
     "error": {
@@ -45,6 +49,7 @@
       "invalid_state": "The authorization response did not match this setup request",
       "missing_code": "The bank did not return an authorization code",
       "reauth_successful": "Bank consent was renewed",
+      "reconfigure_successful": "Bank consent was renewed",
       "unknown": "Unexpected response from Enable Banking"
     }
   },
@@ -52,10 +57,11 @@
     "step": {
       "init": {
         "title": "Enable Banking options",
-        "description": "Choose how often account data is refreshed and how many recent transactions are exposed per account. Set recent transactions to 0 to disable transaction retrieval. Transaction summaries are stored in sensor attributes and may be retained by Home Assistant's recorder.",
+        "description": "Choose how often account data is refreshed, how many recent transactions are exposed per account, and how far back to search. Set recent transactions to 0 to disable transaction retrieval. Transaction summaries are stored in sensor attributes and may be retained by Home Assistant's recorder.",
         "data": {
           "refresh_interval": "Refresh interval (minutes)",
-          "transaction_count": "Recent transactions per account"
+          "transaction_count": "Recent transactions per account",
+          "transaction_lookback_days": "Transaction lookback period (days)"
         }
       }
     }
