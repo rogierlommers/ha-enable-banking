@@ -134,6 +134,7 @@ def test_coordinator_accepts_every_canonical_lookback(
     coordinator = EnableBankingCoordinator(hass, entry, MagicMock())
 
     assert coordinator.transaction_lookback_days == lookback_days
+    assert coordinator.transaction_count == 10
 
 
 async def test_transaction_failure_keeps_balance_update_available(
@@ -190,6 +191,7 @@ async def test_one_account_failure_keeps_other_balance_available(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+        options={CONF_TRANSACTION_COUNT: 0},
     )
     entry.add_to_hass(hass)
     api = MagicMock()
@@ -234,6 +236,7 @@ async def test_application_auth_failure_records_credential_reauth_reason(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+        options={CONF_TRANSACTION_COUNT: 0},
     )
     entry.add_to_hass(hass)
     api = MagicMock()
@@ -259,6 +262,7 @@ async def test_accounts_are_fetched_with_bounded_concurrency(
     entry = MockConfigEntry(
         domain=DOMAIN,
         data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+        options={CONF_TRANSACTION_COUNT: 0},
     )
     entry.add_to_hass(hass)
     api = MagicMock()

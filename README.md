@@ -24,9 +24,9 @@ Example sensor usage:
 - A publicly reachable HTTPS Home Assistant external URL, such as a Home
   Assistant Cloud URL.
 
-This integration reads account information only. Recent transaction retrieval
-is disabled by default and can be enabled in the integration options. The
-integration cannot initiate payments.
+This integration reads account information only. It retrieves up to 10 recent
+transaction summaries per account by default; this can be changed or disabled
+in the integration options. The integration cannot initiate payments.
 
 ## Install
 
@@ -210,7 +210,7 @@ to change:
   Banking. The allowed range is 15 to 1440 minutes (24 hours), and the default
   is 60 minutes.
 - **Recent transactions per account** — how many transaction summaries to
-  expose for each account. The allowed range is 0 to 20, and the default is 0.
+  expose for each account. The allowed range is 0 to 20, and the default is 10.
   Set this to 0 to disable transaction API requests and transaction sensors.
 - **Transaction lookback period** — how far back Enable Banking should search
   for transactions. Choose 7, 30, 90, or 365 days. The default is 90 days.

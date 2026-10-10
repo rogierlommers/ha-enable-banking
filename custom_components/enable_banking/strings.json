@@ -13,7 +13,7 @@
       },
       "bank": {
         "title": "Choose a bank",
-        "description": "Choose the bank and how long access should be requested. Consent explicitly includes balances and transactions so transaction sensors can be enabled later without another authorization. Transaction retrieval remains disabled until configured in the integration options. The bank may enforce a shorter consent period.",
+        "description": "Choose the bank and how long access should be requested. Consent explicitly includes balances and transactions. The integration retrieves up to 10 recent transaction summaries per account by default; this can be changed or disabled after setup. The bank may enforce a shorter consent period.",
         "data": {
           "aspsp_name": "Bank",
           "psu_type": "Customer type",

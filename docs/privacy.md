@@ -17,9 +17,11 @@ Depending on what the connected bank provides, the integration processes:
 - Enable Banking application and session identifiers; and
 - bank-consent status and expiry information.
 
-Recent transaction retrieval is disabled by default. The integration does not
-expose account numbers, provider transaction IDs, postal addresses, or raw
-transaction payloads, and it does not initiate payments.
+The integration retrieves up to 10 recent transaction summaries per account by
+default. Users can change this limit or set it to 0 to disable transaction
+retrieval. The integration does not expose account numbers, provider transaction
+IDs, postal addresses, or raw transaction payloads, and it does not initiate
+payments.
 
 ## Purpose
 

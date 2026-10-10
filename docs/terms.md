@@ -13,8 +13,9 @@ transaction summaries as sensor attributes.
 
 The integration is provided for informational and personal automation purposes.
 It does not provide financial, accounting, tax, legal, or investment advice.
-Recent transaction retrieval is disabled by default. The integration does not
-initiate payments.
+The integration retrieves up to 10 recent transaction summaries per account by
+default. Users can change this limit or disable transaction retrieval. The
+integration does not initiate payments.
 
 ## Authorized use
 

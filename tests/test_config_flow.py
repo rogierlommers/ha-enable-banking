@@ -222,6 +222,19 @@ async def test_options_flow_updates_polling_and_transaction_count(
     }
 
 
+async def test_options_flow_defaults_to_ten_transactions(
+    hass: HomeAssistant,
+) -> None:
+    """New entries expose ten recent transaction summaries by default."""
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    defaults = result["data_schema"]({})
+
+    assert defaults[CONF_TRANSACTION_COUNT] == 10
+
+
 async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
     """Reconfigure replaces the session and reloads the existing entry."""
     entry = MockConfigEntry(

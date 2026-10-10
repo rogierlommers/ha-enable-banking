@@ -13,7 +13,7 @@
       },
       "bank": {
         "title": "Kies een bank",
-        "description": "Kies de bank en hoelang toegang moet worden aangevraagd. De toestemming omvat expliciet saldi en transacties, zodat transactiesensoren later zonder nieuwe autorisatie kunnen worden ingeschakeld. Transacties worden pas opgehaald nadat dit in de integratieopties is ingesteld. De bank kan een kortere toestemmingsperiode hanteren.",
+        "description": "Kies de bank en hoelang toegang moet worden aangevraagd. De toestemming omvat expliciet saldi en transacties. De integratie haalt standaard maximaal 10 recente transactieoverzichten per rekening op; dit kan na de installatie worden aangepast of uitgeschakeld. De bank kan een kortere toestemmingsperiode hanteren.",
         "data": {
           "aspsp_name": "Bank",
           "psu_type": "Type klant",
