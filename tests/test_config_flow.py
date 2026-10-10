@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.enable_banking.const import (
     CONF_APPLICATION_ID,
@@ -12,6 +13,8 @@ from custom_components.enable_banking.const import (
     CONF_COUNTRY,
     CONF_PRIVATE_KEY,
     CONF_PSU_TYPE,
+    CONF_REFRESH_INTERVAL,
+    CONF_TRANSACTION_COUNT,
     DATA_PENDING_FLOWS,
     DOMAIN,
 )
@@ -125,3 +128,29 @@ async def test_rejects_callback_with_wrong_state(hass: HomeAssistant) -> None:
 
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "invalid_state"
+
+
+async def test_options_flow_updates_polling_and_transaction_count(
+    hass: HomeAssistant,
+) -> None:
+    """Options are persisted with bounded values for coordinator reload."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={},
+        options={CONF_REFRESH_INTERVAL: 60, CONF_TRANSACTION_COUNT: 0},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        user_input={CONF_REFRESH_INTERVAL: 30, CONF_TRANSACTION_COUNT: 5},
+    )
+
+    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert entry.options == {
+        CONF_REFRESH_INTERVAL: 30,
+        CONF_TRANSACTION_COUNT: 5,
+    }

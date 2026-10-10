@@ -10,7 +10,7 @@ from typing import Any
 import aiohttp
 import jwt
 
-from .const import API_BASE_URL
+from .const import API_BASE_URL, MAX_TRANSACTION_PAGES
 
 
 class EnableBankingError(Exception):
@@ -161,3 +161,35 @@ class EnableBankingApi:
         if not isinstance(balances, list):
             raise EnableBankingError("Enable Banking returned invalid balance data")
         return [item for item in balances if isinstance(item, dict)]
+
+    async def async_get_transactions(
+        self, account_id: str, limit: int
+    ) -> list[dict[str, Any]]:
+        """Fetch transaction pages until the requested number is available."""
+        if limit <= 0:
+            return []
+
+        transactions: list[dict[str, Any]] = []
+        continuation_key: str | None = None
+        for _page in range(MAX_TRANSACTION_PAGES):
+            params = (
+                {"continuation_key": continuation_key} if continuation_key else None
+            )
+            payload = await self._request(
+                "GET",
+                f"/accounts/{account_id}/transactions",
+                params=params,
+            )
+            page = payload.get("transactions")
+            if not isinstance(page, list):
+                raise EnableBankingError(
+                    "Enable Banking returned invalid transaction data"
+                )
+            transactions.extend(item for item in page if isinstance(item, dict))
+            if len(transactions) >= limit:
+                break
+            continuation_key = payload.get("continuation_key")
+            if not isinstance(continuation_key, str) or not continuation_key:
+                break
+
+        return transactions

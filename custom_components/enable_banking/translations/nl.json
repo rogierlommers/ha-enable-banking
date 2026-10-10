@@ -48,6 +48,18 @@
       "unknown": "Onverwacht antwoord van Enable Banking"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opties voor Enable Banking",
+        "description": "Kies hoe vaak rekeninggegevens worden vernieuwd en hoeveel recente transacties per rekening worden getoond. Stel recente transacties in op 0 om het ophalen van transacties uit te schakelen. Transactieoverzichten worden opgeslagen in sensorattributen en kunnen door de recorder van Home Assistant worden bewaard.",
+        "data": {
+          "refresh_interval": "Vernieuwingsinterval (minuten)",
+          "transaction_count": "Recente transacties per rekening"
+        }
+      }
+    }
+  },
   "selector": {
     "psu_type": {
       "options": {
@@ -60,6 +72,9 @@
     "sensor": {
       "balance": {
         "name": "Saldo"
+      },
+      "recent_transactions": {
+        "name": "Recente transacties"
       }
     }
   }

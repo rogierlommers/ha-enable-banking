@@ -28,6 +28,11 @@ PLATFORMS = [Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload an entry after its options change."""
+    await hass.config_entries.async_reload(entry.entry_id)
+
+
 class EnableBankingCallbackView(HomeAssistantView):
     """Receive Enable Banking authorization callbacks."""
 
@@ -102,6 +107,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     coordinator = EnableBankingCoordinator(hass, entry, api)
     await coordinator.async_config_entry_first_refresh()
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     hass.data[DOMAIN][entry.entry_id] = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

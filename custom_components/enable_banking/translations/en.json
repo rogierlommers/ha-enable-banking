@@ -48,6 +48,18 @@
       "unknown": "Unexpected response from Enable Banking"
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Enable Banking options",
+        "description": "Choose how often account data is refreshed and how many recent transactions are exposed per account. Set recent transactions to 0 to disable transaction retrieval. Transaction summaries are stored in sensor attributes and may be retained by Home Assistant's recorder.",
+        "data": {
+          "refresh_interval": "Refresh interval (minutes)",
+          "transaction_count": "Recent transactions per account"
+        }
+      }
+    }
+  },
   "selector": {
     "psu_type": {
       "options": {
@@ -60,6 +72,9 @@
     "sensor": {
       "balance": {
         "name": "Balance"
+      },
+      "recent_transactions": {
+        "name": "Recent transactions"
       }
     }
   }

@@ -8,11 +8,13 @@ Home Assistant.
 The integration connects Home Assistant to Enable Banking to retrieve
 bank-account information and current balances. It exposes those balances as
 Home Assistant sensors and allows Home Assistant to retain balance history and
-long-term statistics.
+long-term statistics. Users can optionally expose a capped list of recent
+transaction summaries as sensor attributes.
 
 The integration is provided for informational and personal automation purposes.
 It does not provide financial, accounting, tax, legal, or investment advice.
-It does not retrieve transaction history and does not initiate payments.
+Recent transaction retrieval is disabled by default. The integration does not
+initiate payments.
 
 ## Authorized use
 

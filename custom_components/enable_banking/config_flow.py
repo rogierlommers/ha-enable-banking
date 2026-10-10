@@ -10,6 +10,7 @@ from typing import Any
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
+from homeassistant.core import callback
 from homeassistant.helpers import aiohttp_client, selector
 from homeassistant.helpers.network import NoURLAvailableError, get_url
 
@@ -28,11 +29,18 @@ from .const import (
     CONF_COUNTRY,
     CONF_PRIVATE_KEY,
     CONF_PSU_TYPE,
+    CONF_REFRESH_INTERVAL,
     CONF_SESSION_ID,
+    CONF_TRANSACTION_COUNT,
     DATA_PENDING_FLOWS,
     DEFAULT_CONSENT_DAYS,
     DEFAULT_PSU_TYPE,
+    DEFAULT_REFRESH_INTERVAL,
+    DEFAULT_TRANSACTION_COUNT,
     DOMAIN,
+    MAX_REFRESH_INTERVAL,
+    MAX_TRANSACTION_COUNT,
+    MIN_REFRESH_INTERVAL,
 )
 
 
@@ -258,4 +266,67 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_authorize()
         return self.async_show_form(
             step_id="reauth_confirm", data_schema=vol.Schema({})
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Return the options flow."""
+        return EnableBankingOptionsFlow(config_entry)
+
+
+class EnableBankingOptionsFlow(config_entries.OptionsFlow):
+    """Configure polling and recent transaction options."""
+
+    def __init__(self, config_entry: ConfigEntry) -> None:
+        """Initialize options with the current config entry."""
+        self._config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Manage Enable Banking options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_REFRESH_INTERVAL,
+                        default=self._config_entry.options.get(
+                            CONF_REFRESH_INTERVAL, DEFAULT_REFRESH_INTERVAL
+                        ),
+                    ): vol.All(
+                        selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=MIN_REFRESH_INTERVAL,
+                                max=MAX_REFRESH_INTERVAL,
+                                step=5,
+                                mode=selector.NumberSelectorMode.BOX,
+                            )
+                        ),
+                        vol.Coerce(int),
+                    ),
+                    vol.Required(
+                        CONF_TRANSACTION_COUNT,
+                        default=self._config_entry.options.get(
+                            CONF_TRANSACTION_COUNT, DEFAULT_TRANSACTION_COUNT
+                        ),
+                    ): vol.All(
+                        selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=0,
+                                max=MAX_TRANSACTION_COUNT,
+                                step=1,
+                                mode=selector.NumberSelectorMode.BOX,
+                            )
+                        ),
+                        vol.Coerce(int),
+                    ),
+                }
+            ),
         )

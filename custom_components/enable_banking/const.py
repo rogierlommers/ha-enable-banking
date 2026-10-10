@@ -1,7 +1,5 @@
 """Constants for the Enable Banking integration."""
 
-from datetime import timedelta
-
 DOMAIN = "enable_banking"
 PLATFORMS = ["sensor"]
 
@@ -15,10 +13,17 @@ CONF_ASPSP_NAME = "aspsp_name"
 CONF_PSU_TYPE = "psu_type"
 CONF_CONSENT_DAYS = "consent_days"
 CONF_SESSION_ID = "session_id"
+CONF_REFRESH_INTERVAL = "refresh_interval"
+CONF_TRANSACTION_COUNT = "transaction_count"
 
 DEFAULT_CONSENT_DAYS = 90
 DEFAULT_PSU_TYPE = "personal"
-SCAN_INTERVAL = timedelta(hours=1)
+DEFAULT_REFRESH_INTERVAL = 60
+DEFAULT_TRANSACTION_COUNT = 0
+MIN_REFRESH_INTERVAL = 15
+MAX_REFRESH_INTERVAL = 1440
+MAX_TRANSACTION_COUNT = 20
+MAX_TRANSACTION_PAGES = 5
 
 DATA_PENDING_FLOWS = "pending_flows"
 DATA_CALLBACK_REGISTERED = "callback_registered"

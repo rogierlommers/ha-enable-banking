@@ -11,11 +11,15 @@ Depending on what the connected bank provides, the integration processes:
 - the selected bank, bank country, and customer type;
 - bank-account names, products, currencies, and opaque account identifiers;
 - current and available account balances and the times they were reported;
+- recent transaction dates, amounts, currencies, directions, statuses,
+  counterparty names, and remittance text when the user enables transaction
+  retrieval;
 - Enable Banking application and session identifiers; and
 - bank-consent status and expiry information.
 
-The integration does not retrieve transaction history and does not initiate
-payments.
+Recent transaction retrieval is disabled by default. The integration does not
+expose account numbers, provider transaction IDs, postal addresses, or raw
+transaction payloads, and it does not initiate payments.
 
 ## Purpose
 
@@ -23,6 +27,7 @@ The data is processed only to:
 
 - connect a bank account through Enable Banking;
 - show current account balances in Home Assistant;
+- optionally show a capped list of recent transaction summaries;
 - create balance history and long-term statistics; and
 - support dashboards, automations, maintenance, and troubleshooting within the
   user's Home Assistant installation.
@@ -31,7 +36,9 @@ The data is processed only to:
 
 The integration stores its configuration in the user's Home Assistant
 installation. Balance states and statistics are stored by Home Assistant's
-recorder. This data may also be included in Home Assistant backups.
+recorder. Recent transaction summaries are stored as sensor attributes and may
+also be retained by the recorder. This data may be included in Home Assistant
+backups.
 
 Retention is controlled by the user's Home Assistant recorder, statistics, and
 backup settings. Removing the integration does not automatically remove

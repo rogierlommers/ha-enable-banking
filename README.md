@@ -3,6 +3,8 @@
 A HACS custom integration that connects Home Assistant to bank accounts through
 the [Enable Banking API](https://enablebanking.com/docs/api/). It creates one
 monetary balance sensor for every account returned by a bank connection.
+Users can optionally expose a capped list of recent transaction summaries for
+each account.
 
 Balance sensors opt in to Home Assistant long-term statistics, so their history
 is available to History cards, statistics graphs, and automations without a
@@ -17,8 +19,9 @@ separate history database.
 - A publicly reachable HTTPS Home Assistant external URL, such as a Home
   Assistant Cloud URL
 
-This integration reads account information only. It does not fetch transactions
-or initiate payments.
+This integration reads account information only. Recent transaction retrieval
+is disabled by default and can be enabled in the integration options. The
+integration cannot initiate payments.
 
 ## Install
 
@@ -130,7 +133,7 @@ email addresses with values you control.
 | --- | --- | --- |
 | **Application name** | A recognizable name. This may be shown by Enable Banking during bank consent. | `Home Assistant – Personal banking` |
 | **Allowed redirect URLs (one per line)** | The exact public HTTPS Home Assistant callback URL. Add one URL per line if you have more than one explicitly supported external hostname. Do not add a trailing slash. | `https://your-id.ui.nabu.casa/api/enable_banking/callback` |
-| **Application description** | A short, accurate explanation of the read-only integration. Required for production applications. | `Read-only Home Assistant integration that retrieves my account names and current balances for local dashboards and history.` |
+| **Application description** | A short, accurate explanation of the read-only integration. Required for production applications. | `Read-only Home Assistant integration that retrieves my account names, balances, and optionally recent transactions for local dashboards and history.` |
 | **Email for data protection matters** | A monitored email address for privacy or data-protection questions. Required for production applications. | `privacy@example.com` |
 | **Privacy URL of the application** | A public HTTPS privacy notice. This repository provides a generic notice that all integration users may reference. Required for production applications. | `https://github.com/rogierlommers/ha-enable-banking/blob/main/docs/privacy.md` |
 | **Terms URL of the application** | A public HTTPS terms page. This repository provides generic terms that all integration users may reference. Required for production applications. | `https://github.com/rogierlommers/ha-enable-banking/blob/main/docs/terms.md` |
@@ -190,7 +193,7 @@ The environment of the Application ID controls which banks and accounts are
 available: sandbox credentials cannot access production accounts, and
 production credentials cannot access sandbox accounts.
 
-## Sensors and history
+## Entities, refresh options, and history
 
 Each account is represented as a Home Assistant device with one **Balance**
 sensor. The sensor:
@@ -207,6 +210,44 @@ closing booked (`CLBD`). It falls back to the first valid balance.
 History begins when the integration is installed. Enable Banking does not
 provide historical balance samples through its balances endpoint, so earlier
 balances cannot be backfilled reliably.
+
+### Integration options
+
+After setup, open **Settings → Devices & services → Enable Banking → Configure**
+to change:
+
+- **Refresh interval** — how often Home Assistant requests new data from Enable
+  Banking. The allowed range is 15 to 1440 minutes (24 hours), and the default
+  is 60 minutes.
+- **Recent transactions per account** — how many transaction summaries to
+  expose for each account. The allowed range is 0 to 20, and the default is 0.
+  Set this to 0 to disable transaction API requests and transaction sensors.
+
+Saving options reloads the integration so the new polling interval and entities
+take effect immediately.
+
+### Recent transaction sensors
+
+When **Recent transactions per account** is greater than 0, each account gets a
+**Recent transactions** sensor. Its state is the number of summaries currently
+available. The `transactions` attribute contains a capped list with:
+
+- booking, transaction, or value date;
+- amount and currency;
+- credit/debit direction;
+- transaction status;
+- counterparty name; and
+- remittance text.
+
+The integration deliberately omits account numbers, IBANs, provider transaction
+IDs, postal addresses, and raw API responses. Counterparty and remittance text
+are length-limited to bound state and recorder payloads.
+
+Transaction summaries are sensitive financial data. Home Assistant's recorder
+may retain sensor attributes, and backups may contain recorder data. Enable only
+the number of transactions needed and protect dashboards, history, the database,
+and backups accordingly. Enable Banking pagination is capped to prevent an
+unbounded number of API requests during one refresh.
 
 ## Consent renewal
 

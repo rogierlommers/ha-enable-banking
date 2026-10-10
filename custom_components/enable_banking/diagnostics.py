@@ -23,6 +23,7 @@ async def async_get_config_entry_diagnostics(
     }
     return {
         "config_entry": data,
+        "options": dict(entry.options),
         "last_update_success": coordinator.last_update_success,
         "account_count": len(coordinator.data),
         "currencies": sorted(
