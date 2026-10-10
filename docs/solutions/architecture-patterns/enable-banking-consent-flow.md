@@ -1,6 +1,7 @@
 ---
 title: Treat Enable Banking consent as an external config-flow step
 date: 2026-10-10
+last_updated: 2026-10-10
 category: architecture-patterns
 module: Enable Banking authorization
 problem_type: architecture_pattern
@@ -41,6 +42,19 @@ Model consent as a Home Assistant external config-flow step:
    the expected callback fields to `flow.async_configure`.
 6. Compare state again in the flow, exchange the code through `POST /sessions`,
    then finish with `async_external_step_done`.
+
+Do not assume that loading `config_flow.py` has already run the integration's
+`async_setup`. Initialize the pending-flow registry and register the callback
+view through one idempotent helper that both setup and the first config-flow
+step call. This keeps the authorization entry point valid regardless of which
+Home Assistant loader path runs first.
+
+An external step may transition only to another external step or to
+`async_external_step_done`. Callback errors therefore cannot abort directly.
+Store the translated abort reason, return `async_external_step_done` to a small
+internal error step, and let that step return `async_abort`. Tests should assert
+both transitions so a framework upgrade cannot silently reintroduce the
+illegal external-step-to-abort path.
 
 The callback response should set `Cache-Control: no-store` and
 `Referrer-Policy: no-referrer`. Never include the authorization code, private

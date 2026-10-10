@@ -1,6 +1,6 @@
 """Tests for the Enable Banking config flow."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.core import HomeAssistant
@@ -67,9 +67,16 @@ async def _start_authorization(hass: HomeAssistant) -> tuple[str, str]:
 
 async def test_complete_config_flow(hass: HomeAssistant) -> None:
     """A valid callback creates a config entry with the supplied credentials."""
-    with patch(
-        "custom_components.enable_banking.config_flow.get_url",
-        return_value="https://ha.example",
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
     ):
         flow_id, state = await _start_authorization(hass)
 
@@ -97,15 +104,24 @@ async def test_complete_config_flow(hass: HomeAssistant) -> None:
 
 async def test_rejects_callback_with_wrong_state(hass: HomeAssistant) -> None:
     """A callback cannot complete a different or forged flow."""
-    with patch(
-        "custom_components.enable_banking.config_flow.get_url",
-        return_value="https://ha.example",
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
     ):
         flow_id, _state = await _start_authorization(hass)
         result = await hass.config_entries.flow.async_configure(
             flow_id,
             user_input={"state": "wrong-state", "code": "authorization-code"},
         )
+        assert result["type"] is data_entry_flow.FlowResultType.EXTERNAL_STEP_DONE
+        result = await hass.config_entries.flow.async_configure(flow_id)
 
     assert result["type"] is data_entry_flow.FlowResultType.ABORT
     assert result["reason"] == "invalid_state"
