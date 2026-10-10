@@ -1,11 +1,9 @@
 """Tests for the public Enable Banking authorization callback."""
 
-import sys
 from collections.abc import Awaitable, Callable
 from unittest.mock import AsyncMock, patch
 
-import pytest
-from aiohttp import ClientResponse
+from aiohttp import ClientResponse, ThreadedResolver
 from aiohttp.test_utils import TestClient
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import UnknownFlow
@@ -16,11 +14,6 @@ from custom_components.enable_banking.const import (
     CALLBACK_PATH,
     DATA_PENDING_FLOWS,
     DOMAIN,
-)
-
-pytestmark = pytest.mark.skipif(
-    sys.platform == "darwin",
-    reason="aiohttp's macOS resolver leaves a pycares shutdown thread behind",
 )
 
 
@@ -37,7 +30,9 @@ async def test_callback_forwards_allowlisted_fields_once(
     """A valid callback is forwarded once without unexpected query fields."""
     await async_setup_component(hass, "http", {})
     async_ensure_callback_registered(hass)
-    client = await hass_client()
+    # The optional aiodns resolver leaves a pycares shutdown thread behind.
+    with patch("aiohttp.connector.DefaultResolver", ThreadedResolver):
+        client = await hass_client()
     hass.data[DOMAIN][DATA_PENDING_FLOWS]["valid-state"] = "flow-id"
     configure = AsyncMock()
 
@@ -73,7 +68,9 @@ async def test_callback_handles_expired_home_assistant_flow(
     """A callback for a removed flow returns a private controlled error."""
     await async_setup_component(hass, "http", {})
     async_ensure_callback_registered(hass)
-    client = await hass_client()
+    # Keep the test client inside Home Assistant's strict thread-cleanup contract.
+    with patch("aiohttp.connector.DefaultResolver", ThreadedResolver):
+        client = await hass_client()
     hass.data[DOMAIN][DATA_PENDING_FLOWS]["expired-state"] = "expired-flow"
 
     with patch.object(
