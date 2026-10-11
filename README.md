@@ -1,34 +1,21 @@
 # Enable Banking for Home Assistant
 
-A HACS custom integration that connects Home Assistant to bank accounts through
-the [Enable Banking API](https://enablebanking.com/docs/api/). It creates one
-monetary balance sensor for every account returned by a bank connection.
-Users can optionally expose a capped list of recent transaction summaries for
-each account.
+[![Validate](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/validate.yml/badge.svg)](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/validate.yml)
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 
-Balance sensors opt in to Home Assistant long-term statistics, so their history
-is available to History cards, statistics graphs, and automations without a
-separate history database.
+A HACS custom integration that connects Home Assistant to bank accounts through the [Enable Banking API](https://enablebanking.com/docs/api/). It uses the open PSD2 API and can connect to 2,700+ banks across 30 European countries. It allows you to show account balances and get a list of recent transactions so you can create graphs, dashboards and alerts in home assistant. Example sensor usage:
 
-Example sensor usage:
 - [Alert if balance is low](docs/alert_if_low_balance.md)
 - [Receive daily account overview](docs/daily_account_overview.md)
 - [apexcharts-card visualisation of balances](docs/apexcharts-card-overview.md)
 
 ## Requirements
 
-- Home Assistant 2025.1 or newer.
-- HACS.
-- An [Enable Banking](https://enablebanking.com/cp) application and its RSA
-  private key (see [below](#enable-banking-application-field-guide) for detailed instructions).
-- A publicly reachable HTTPS Home Assistant external URL, such as a Home
-  Assistant Cloud URL.
+- Home Assistant 2025.1 or newer with HACS.
+- An [Enable Banking](https://enablebanking.com/cp) application and its RSA private key (see [below](#enable-banking-application-field-guide) for detailed instructions).
+- A publicly reachable HTTPS Home Assistant external URL, such as a Home Assistant Cloud URL.
 
-This integration reads account information only. It retrieves up to 10 recent
-transaction summaries per account by default; this can be changed or disabled
-in the integration options. The integration cannot initiate payments.
-
-## Install
+## How to install
 
 1. In HACS, add this repository as a custom **Integration** repository.
 2. Install **Enable Banking** and restart Home Assistant.
