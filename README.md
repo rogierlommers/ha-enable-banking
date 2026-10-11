@@ -23,6 +23,8 @@ Now create an account for EnableBanking. After that, in [Enable Banking / contro
 
 ![image](docs/assets/EnableBanking-create-app1.png)
 
+## The fields explained
+
 | Enable Banking field | What to enter | Example |
 | --- | --- | --- |
 | **Application name** | A recognizable name. This may be shown by Enable Banking during bank consent. | `Home Assistant - Personal banking` |
