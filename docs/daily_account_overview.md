@@ -1,5 +1,4 @@
-
-![image](docs/assets/Example-graph.png)
+# Receive daily overview of transactions
 
 ```yaml
 alias: Dagelijks bankoverzicht
