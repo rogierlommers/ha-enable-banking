@@ -1,8 +1,7 @@
-# Daily report of transactions
 
-Let Home Asistant send you a daily report of all transactions grouped by your bank accounts. Create an automation that looks like this; of course replace the target notification (or change the type of notification) and change the bank account sensors.
+![image](docs/assets/Example-graph.png)
 
-```
+```yaml
 alias: Dagelijks bankoverzicht
 description: Dagelijks overzicht van recente transacties per bankrekening
 triggers:

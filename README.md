@@ -9,6 +9,12 @@ A HACS custom integration that connects Home Assistant to bank accounts through 
 - [Receive daily account overview](docs/daily_account_overview.md)
 - [apexcharts-card visualisation of balances](docs/apexcharts-card-overview.md)
 
+### Example visualisation
+
+![image](docs/assets/Example-graph-small.png)
+
+<!-- ![](./pic/pic1s.png =250x) -->
+
 ## Requirements
 
 - Home Assistant 2025.1 or newer with HACS installed.
