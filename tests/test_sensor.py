@@ -1,5 +1,6 @@
 """Tests for Enable Banking balance sensors."""
 
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -13,6 +14,7 @@ from custom_components.enable_banking.coordinator import (
 )
 from custom_components.enable_banking.sensor import (
     EnableBankingBalanceSensor,
+    EnableBankingLastRefreshSensor,
     EnableBankingTransactionsSensor,
     async_setup_entry,
 )
@@ -131,6 +133,21 @@ def test_transactions_sensor_is_unavailable_after_transaction_fetch_failure() ->
     assert sensor.extra_state_attributes == {}
 
 
+def test_last_refresh_sensor_exposes_coordinator_timestamp() -> None:
+    """The last-refresh sensor exposes an aware timestamp."""
+    refreshed_at = datetime(2026, 10, 17, 12, 30, tzinfo=UTC)
+    coordinator = MagicMock()
+    coordinator.last_update_success = False
+    coordinator.last_refresh = refreshed_at
+    entry = MockConfigEntry(domain=DOMAIN)
+
+    sensor = EnableBankingLastRefreshSensor(coordinator, entry)
+
+    assert sensor.native_value == refreshed_at
+    assert sensor.available is True
+    assert sensor.device_class == "timestamp"
+
+
 async def test_platform_adds_accounts_seen_after_initial_setup(
     hass: HomeAssistant,
 ) -> None:
@@ -171,12 +188,16 @@ async def test_platform_adds_accounts_seen_after_initial_setup(
     added = []
 
     await async_setup_entry(hass, entry, added.extend)
-    assert [entity.unique_id for entity in added] == ["stable-one_balance"]
+    assert [entity.unique_id for entity in added] == [
+        f"{entry.entry_id}_last_refresh",
+        "stable-one_balance",
+    ]
 
     coordinator.data[second.stable_id] = second
     listeners[0]()
 
     assert [entity.unique_id for entity in added] == [
+        f"{entry.entry_id}_last_refresh",
         "stable-one_balance",
         "stable-two_balance",
     ]

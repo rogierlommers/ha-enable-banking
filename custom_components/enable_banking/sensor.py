@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -29,6 +30,8 @@ async def async_setup_entry(
     coordinator: EnableBankingCoordinator = hass.data[DOMAIN][entry.entry_id]
     known_accounts: set[str] = set()
 
+    async_add_entities([EnableBankingLastRefreshSensor(coordinator, entry)])
+
     @callback
     def async_add_missing_entities() -> None:
         """Add entities for accounts first observed after platform setup."""
@@ -45,6 +48,35 @@ async def async_setup_entry(
 
     async_add_missing_entities()
     entry.async_on_unload(coordinator.async_add_listener(async_add_missing_entities))
+
+
+class EnableBankingLastRefreshSensor(
+    CoordinatorEntity[EnableBankingCoordinator], SensorEntity
+):
+    """Represent the time of the most recent successful data refresh."""
+
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_has_entity_name = True
+    _attr_translation_key = "last_refresh"
+
+    def __init__(
+        self,
+        coordinator: EnableBankingCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the last-refresh sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_last_refresh"
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the most recent successful refresh time."""
+        return self.coordinator.last_refresh
+
+    @property
+    def available(self) -> bool:
+        """Keep the last successful refresh visible after update failures."""
+        return self.coordinator.last_refresh is not None
 
 
 class EnableBankingBalanceSensor(
