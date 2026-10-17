@@ -90,6 +90,9 @@
       },
       "recent_transactions": {
         "name": "Recente transacties"
+      },
+      "last_refresh": {
+        "name": "Laatst vernieuwd"
       }
     }
   }

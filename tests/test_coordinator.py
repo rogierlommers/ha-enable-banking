@@ -176,6 +176,7 @@ async def test_transaction_failure_keeps_balance_update_available(
         await coordinator.async_refresh()
 
     assert coordinator.last_update_success is True
+    assert coordinator.last_refresh == datetime(2026, 10, 10, tzinfo=UTC)
     account = next(iter(coordinator.data.values()))
     assert account.amount.is_finite()
     assert account.transactions is None

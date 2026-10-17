@@ -61,6 +61,10 @@ Each account is represented as a Home Assistant device with one **Balance** sens
 - has the `monetary` device class and `total` state class;
 - is retained by Home Assistant's recorder and long-term statistics.
 
+The integration also provides one **Last refresh** timestamp sensor. It records
+when the most recent successful shared refresh of all available account data
+completed and retains its previous value if a refresh fails.
+
 ### Integration options
 
 After setup, open **Settings → Devices & services → Enable Banking → Configure** to change:

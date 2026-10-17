@@ -90,6 +90,9 @@
       },
       "recent_transactions": {
         "name": "Recent transactions"
+      },
+      "last_refresh": {
+        "name": "Last refresh"
       }
     }
   }

@@ -220,6 +220,7 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
             if configured_lookback in TRANSACTION_LOOKBACK_OPTIONS
             else DEFAULT_TRANSACTION_LOOKBACK_DAYS
         )
+        self.last_refresh: datetime | None = None
         self._account_details: dict[str, dict[str, Any]] = {}
 
     async def _async_get_account_balance(
@@ -340,6 +341,7 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
                     result[outcome.stable_id] = outcome
             if failures and not result:
                 raise UpdateFailed("Unable to update any bank account")
+            self.last_refresh = datetime.now(tz=UTC)
             return result
         except EnableBankingApplicationAuthError as err:
             self.hass.data.setdefault(DOMAIN, {}).setdefault(DATA_REAUTH_REASONS, {})[
