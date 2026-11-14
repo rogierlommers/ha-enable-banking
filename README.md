@@ -1,7 +1,9 @@
 # Enable Banking for Home Assistant
 
-[![Validate](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/validate.yml/badge.svg)](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/validate.yml)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Validate](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/validate.yml/badge.svg)](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/validate.yml)
+[![Dependency Graph](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/dependabot/update-graph/badge.svg)](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/dependabot/update-graph)
+[![Dependabot Updates](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/dependabot/dependabot-updates/badge.svg)](https://github.com/rogierlommers/ha-enable-banking/actions/workflows/dependabot/dependabot-updates)
 
 A HACS custom integration that connects Home Assistant to bank accounts through the [Enable Banking API](https://enablebanking.com/docs/api/). It uses the open PSD2 API and can connect to 2,700+ banks across 30 European countries. It allows you to show account balances and get a list of recent transactions so you can create graphs, dashboards and alerts in home assistant. Example sensor usage:
 
