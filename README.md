@@ -78,14 +78,24 @@ After setup, open **Settings → Devices & services → Enable Banking → Confi
 - **Refresh interval** — how often Home Assistant requests new data from Enable
   Banking. The allowed range is 15 to 1440 minutes (24 hours), and the default
   is 60 minutes.
+- **Requested authentication validity** — how many days of access to request
+  during the next bank authorization. The allowed range is 1 to 365 days, and
+  the default is 90 days. A bank may grant a shorter period. Changing this
+  option does not extend the active authorization; renew the bank consent to
+  apply it.
 - **Recent transactions per account** — how many transaction summaries to
   expose for each account. The allowed range is 0 to 20, and the default is 10.
   Set this to 0 to disable transaction API requests and transaction sensors.
 - **Transaction lookback period** — how far back Enable Banking should search
   for transactions. Choose 7, 30, 90, or 365 days. The default is 90 days.
 
-Saving options reloads the integration so the new polling interval and entities
-take effect immediately.
+Saving options reloads the integration. Polling and transaction changes take
+effect immediately; requested authentication validity applies at the next bank
+authorization.
+
+The **Authentication expires in** sensor reports the number of days remaining
+from the expiry returned by Enable Banking. A partial final day is rounded up,
+and the sensor becomes unavailable when the API does not provide a valid expiry.
 
 The transaction count is a maximum, not a guarantee. The integration requests
 transactions from the configured lookback date, follows at most five API pages,

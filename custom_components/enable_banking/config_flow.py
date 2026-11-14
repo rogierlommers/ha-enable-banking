@@ -45,8 +45,10 @@ from .const import (
     DEFAULT_TRANSACTION_COUNT,
     DEFAULT_TRANSACTION_LOOKBACK_DAYS,
     DOMAIN,
+    MAX_CONSENT_DAYS,
     MAX_REFRESH_INTERVAL,
     MAX_TRANSACTION_COUNT,
+    MIN_CONSENT_DAYS,
     MIN_REFRESH_INTERVAL,
     REAUTH_REASON_APPLICATION,
     TRANSACTION_LOOKBACK_OPTIONS,
@@ -86,6 +88,19 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._data[CONF_APPLICATION_ID],
             self._data[CONF_PRIVATE_KEY],
         )
+
+    def _consent_days(self) -> int:
+        """Return the requested duration for the next bank authorization."""
+        entry = self._reauth_entry or self._reconfigure_entry
+        configured = (
+            entry.options.get(
+                CONF_CONSENT_DAYS,
+                entry.data.get(CONF_CONSENT_DAYS, DEFAULT_CONSENT_DAYS),
+            )
+            if entry is not None
+            else self._data.get(CONF_CONSENT_DAYS, DEFAULT_CONSENT_DAYS)
+        )
+        return max(MIN_CONSENT_DAYS, min(MAX_CONSENT_DAYS, int(configured)))
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -190,8 +205,8 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_CONSENT_DAYS, default=DEFAULT_CONSENT_DAYS
                 ): selector.NumberSelector(
                     selector.NumberSelectorConfig(
-                        min=1,
-                        max=365,
+                        min=MIN_CONSENT_DAYS,
+                        max=MAX_CONSENT_DAYS,
                         mode=selector.NumberSelectorMode.BOX,
                     )
                 ),
@@ -229,9 +244,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         async_ensure_callback_registered(self.hass)
         self._state = secrets.token_urlsafe(32)
         async_register_pending_flow(self.hass, self._state, self.flow_id)
-        valid_until = datetime.now(tz=UTC) + timedelta(
-            days=int(self._data[CONF_CONSENT_DAYS])
-        )
+        valid_until = datetime.now(tz=UTC) + timedelta(days=self._consent_days())
         try:
             authorization_url = await self._new_api().async_start_authorization(
                 country=self._data[CONF_COUNTRY],
@@ -241,7 +254,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 state=self._state,
                 redirect_url=self._callback_url(),
             )
-        except (EnableBankingError, NoURLAvailableError):
+        except EnableBankingError, NoURLAvailableError:
             async_remove_pending_flow(self.hass, self._state)
             return self.async_abort(reason="cannot_connect")
         return self.async_external_step(step_id="authorize", url=authorization_url)
@@ -396,7 +409,7 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class EnableBankingOptionsFlow(config_entries.OptionsFlow):
-    """Configure polling and recent transaction options."""
+    """Configure consent, polling, and recent transaction options."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options with the current config entry."""
@@ -413,6 +426,25 @@ class EnableBankingOptionsFlow(config_entries.OptionsFlow):
             step_id="init",
             data_schema=vol.Schema(
                 {
+                    vol.Required(
+                        CONF_CONSENT_DAYS,
+                        default=self._config_entry.options.get(
+                            CONF_CONSENT_DAYS,
+                            self._config_entry.data.get(
+                                CONF_CONSENT_DAYS, DEFAULT_CONSENT_DAYS
+                            ),
+                        ),
+                    ): vol.All(
+                        selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=MIN_CONSENT_DAYS,
+                                max=MAX_CONSENT_DAYS,
+                                step=1,
+                                mode=selector.NumberSelectorMode.BOX,
+                            )
+                        ),
+                        vol.Coerce(int),
+                    ),
                     vol.Required(
                         CONF_REFRESH_INTERVAL,
                         default=self._config_entry.options.get(

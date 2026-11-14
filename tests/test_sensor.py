@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -13,10 +13,13 @@ from custom_components.enable_banking.coordinator import (
     TransactionSummary,
 )
 from custom_components.enable_banking.sensor import (
+    EnableBankingAuthenticationExpirySensor,
     EnableBankingBalanceSensor,
     EnableBankingLastRefreshSensor,
     EnableBankingTransactionsSensor,
     async_setup_entry,
+    authentication_days_remaining,
+    next_authentication_expiry_update,
 )
 
 
@@ -148,6 +151,49 @@ def test_last_refresh_sensor_exposes_coordinator_timestamp() -> None:
     assert sensor.device_class == "timestamp"
 
 
+def test_authentication_expiry_sensor_rounds_partial_days_up() -> None:
+    """Any remaining part of a day is shown as one full day to reauthorization."""
+    now = datetime(2026, 10, 17, 12, 30, tzinfo=UTC)
+    coordinator = MagicMock()
+    coordinator.session_valid_until = datetime(2026, 10, 19, 12, 29, tzinfo=UTC)
+    entry = MockConfigEntry(domain=DOMAIN)
+
+    with patch("custom_components.enable_banking.sensor.datetime") as datetime_mock:
+        datetime_mock.now.return_value = now
+        sensor = EnableBankingAuthenticationExpirySensor(coordinator, entry)
+        value = sensor.native_value
+
+    assert value == 2
+    assert sensor.available is True
+    assert sensor.device_class == "duration"
+    assert sensor.native_unit_of_measurement == "d"
+
+
+def test_authentication_expiry_sensor_is_unavailable_without_expiry() -> None:
+    """Missing or malformed API expiry data does not produce a guessed state."""
+    coordinator = MagicMock()
+    coordinator.session_valid_until = None
+    entry = MockConfigEntry(domain=DOMAIN)
+
+    sensor = EnableBankingAuthenticationExpirySensor(coordinator, entry)
+
+    assert sensor.available is False
+    assert sensor.native_value is None
+
+
+def test_authentication_expiry_boundaries() -> None:
+    """The countdown clamps expired sessions and schedules every state change."""
+    now = datetime(2026, 10, 17, 12, 30, tzinfo=UTC)
+    valid_until = datetime(2026, 10, 19, 12, 30, tzinfo=UTC)
+
+    assert authentication_days_remaining(valid_until, now) == 2
+    assert next_authentication_expiry_update(valid_until, now) == datetime(
+        2026, 10, 18, 12, 30, tzinfo=UTC
+    )
+    assert authentication_days_remaining(now, now) == 0
+    assert next_authentication_expiry_update(now, now) is None
+
+
 async def test_platform_adds_accounts_seen_after_initial_setup(
     hass: HomeAssistant,
 ) -> None:
@@ -190,6 +236,7 @@ async def test_platform_adds_accounts_seen_after_initial_setup(
     await async_setup_entry(hass, entry, added.extend)
     assert [entity.unique_id for entity in added] == [
         f"{entry.entry_id}_last_refresh",
+        f"{entry.entry_id}_authentication_expires_in",
         "stable-one_balance",
     ]
 
@@ -198,6 +245,7 @@ async def test_platform_adds_accounts_seen_after_initial_setup(
 
     assert [entity.unique_id for entity in added] == [
         f"{entry.entry_id}_last_refresh",
+        f"{entry.entry_id}_authentication_expires_in",
         "stable-one_balance",
         "stable-two_balance",
     ]
