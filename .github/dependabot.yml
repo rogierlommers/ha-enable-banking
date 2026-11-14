@@ -6,6 +6,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    assignees: [rogierlommers]
     groups:
       github-actions:
         patterns:
@@ -16,6 +17,7 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    assignees: [rogierlommers]
     groups:
       python-dependencies:
         patterns:
