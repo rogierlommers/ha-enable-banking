@@ -63,8 +63,9 @@ test = [
 ]
 ```
 
-Set the project and CI minimum to Python 3.14.2, then verify the complete extra
-before evaluating individual lint or test failures:
+Set the project minimum to Python 3.14.2 and select a Python 3.14 patch release
+available for the CI runner, then verify the complete extra before evaluating
+individual lint or test failures:
 
 ```bash
 pip install -e '.[test]'
@@ -91,6 +92,8 @@ updates Dependabot considers installable.
 - When Dependabot reports `security_update_not_possible`, compare the patched
   dependency's Python requirement with both `requires-python` and the CI Python
   version.
+- Before pinning an exact CI Python patch, check that `actions/setup-python`
+  publishes it for the workflow's current Ubuntu runner image.
 
 ## Related Issues
 
