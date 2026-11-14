@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from math import ceil
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -12,13 +13,30 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import UnitOfTime
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import AccountBalance, EnableBankingCoordinator
+
+
+def authentication_days_remaining(valid_until: datetime, now: datetime) -> int:
+    """Return whole days remaining, rounding a partial final day up."""
+    return max(0, ceil((valid_until - now) / timedelta(days=1)))
+
+
+def next_authentication_expiry_update(
+    valid_until: datetime, now: datetime
+) -> datetime | None:
+    """Return when the rounded days-remaining state next changes."""
+    days_remaining = authentication_days_remaining(valid_until, now)
+    if days_remaining == 0:
+        return None
+    return valid_until - timedelta(days=days_remaining - 1)
 
 
 async def async_setup_entry(
@@ -30,7 +48,12 @@ async def async_setup_entry(
     coordinator: EnableBankingCoordinator = hass.data[DOMAIN][entry.entry_id]
     known_accounts: set[str] = set()
 
-    async_add_entities([EnableBankingLastRefreshSensor(coordinator, entry)])
+    async_add_entities(
+        [
+            EnableBankingLastRefreshSensor(coordinator, entry),
+            EnableBankingAuthenticationExpirySensor(coordinator, entry),
+        ]
+    )
 
     @callback
     def async_add_missing_entities() -> None:
@@ -77,6 +100,83 @@ class EnableBankingLastRefreshSensor(
     def available(self) -> bool:
         """Keep the last successful refresh visible after update failures."""
         return self.coordinator.last_refresh is not None
+
+
+class EnableBankingAuthenticationExpirySensor(
+    CoordinatorEntity[EnableBankingCoordinator], SensorEntity
+):
+    """Represent the number of days until bank authentication expires."""
+
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_has_entity_name = True
+    _attr_native_unit_of_measurement = UnitOfTime.DAYS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "authentication_expires_in"
+
+    def __init__(
+        self,
+        coordinator: EnableBankingCoordinator,
+        entry: ConfigEntry,
+    ) -> None:
+        """Initialize the authentication-expiry sensor."""
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_authentication_expires_in"
+        self._cancel_expiry_update: CALLBACK_TYPE | None = None
+
+    async def async_added_to_hass(self) -> None:
+        """Schedule updates at rounded day boundaries."""
+        await super().async_added_to_hass()
+        self._schedule_expiry_update()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Cancel the scheduled boundary update."""
+        if self._cancel_expiry_update is not None:
+            self._cancel_expiry_update()
+            self._cancel_expiry_update = None
+        await super().async_will_remove_from_hass()
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Reschedule when the provider reports a new expiry."""
+        self._schedule_expiry_update()
+        super()._handle_coordinator_update()
+
+    @callback
+    def _schedule_expiry_update(self) -> None:
+        """Schedule the next day-boundary or exact-expiry update."""
+        if self._cancel_expiry_update is not None:
+            self._cancel_expiry_update()
+            self._cancel_expiry_update = None
+        if self.coordinator.session_valid_until is None:
+            return
+        update_at = next_authentication_expiry_update(
+            self.coordinator.session_valid_until, datetime.now(tz=UTC)
+        )
+        if update_at is not None:
+            self._cancel_expiry_update = async_track_point_in_utc_time(
+                self.hass, self._async_expiry_update, update_at
+            )
+
+    @callback
+    def _async_expiry_update(self, _now: datetime) -> None:
+        """Publish the new rounded value and schedule the next boundary."""
+        self._cancel_expiry_update = None
+        self.async_write_ha_state()
+        self._schedule_expiry_update()
+
+    @property
+    def native_value(self) -> int | None:
+        """Return whole days remaining, rounding a partial final day up."""
+        if self.coordinator.session_valid_until is None:
+            return None
+        return authentication_days_remaining(
+            self.coordinator.session_valid_until, datetime.now(tz=UTC)
+        )
+
+    @property
+    def available(self) -> bool:
+        """Keep the last known expiry visible after transient update failures."""
+        return self.coordinator.session_valid_until is not None
 
 
 class EnableBankingBalanceSensor(

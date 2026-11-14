@@ -66,8 +66,9 @@
     "step": {
       "init": {
         "title": "Enable Banking options",
-        "description": "Choose how often account data is refreshed, how many recent transactions are exposed per account, and how far back to search. Set recent transactions to 0 to disable transaction retrieval. Transaction summaries are stored in sensor attributes, may be retained by Home Assistant's recorder, and can be read by authenticated Home Assistant users who have access to entity states. Hiding a dashboard card is not an access-control boundary.",
+        "description": "Choose the duration requested at the next bank authorization, how often account data is refreshed, how many recent transactions are exposed per account, and how far back to search. Changing the requested duration does not extend the current authorization; renew the bank consent to apply it. Set recent transactions to 0 to disable transaction retrieval. Transaction summaries are stored in sensor attributes, may be retained by Home Assistant's recorder, and can be read by authenticated Home Assistant users who have access to entity states. Hiding a dashboard card is not an access-control boundary.",
         "data": {
+          "consent_days": "Requested authentication validity (days)",
           "refresh_interval": "Refresh interval (minutes)",
           "transaction_count": "Recent transactions per account",
           "transaction_lookback_days": "Transaction lookback period (days)"
@@ -93,6 +94,9 @@
       },
       "last_refresh": {
         "name": "Last refresh"
+      },
+      "authentication_expires_in": {
+        "name": "Authentication expires in"
       }
     }
   }

@@ -1,5 +1,6 @@
 """Tests for the Enable Banking config flow."""
 
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant import config_entries, data_entry_flow
@@ -193,6 +194,7 @@ async def test_options_flow_updates_polling_and_transaction_count(
         domain=DOMAIN,
         data={},
         options={
+            CONF_CONSENT_DAYS: 120,
             CONF_REFRESH_INTERVAL: 60,
             CONF_TRANSACTION_COUNT: 0,
             CONF_TRANSACTION_LOOKBACK_DAYS: 7,
@@ -203,11 +205,13 @@ async def test_options_flow_updates_polling_and_transaction_count(
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     untouched_defaults = result["data_schema"]({})
+    assert untouched_defaults[CONF_CONSENT_DAYS] == 120
     assert untouched_defaults[CONF_TRANSACTION_LOOKBACK_DAYS] == 7
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         user_input={
+            CONF_CONSENT_DAYS: 180,
             CONF_REFRESH_INTERVAL: 30,
             CONF_TRANSACTION_COUNT: 5,
             CONF_TRANSACTION_LOOKBACK_DAYS: "90",
@@ -216,6 +220,7 @@ async def test_options_flow_updates_polling_and_transaction_count(
 
     assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
     assert entry.options == {
+        CONF_CONSENT_DAYS: 180,
         CONF_REFRESH_INTERVAL: 30,
         CONF_TRANSACTION_COUNT: 5,
         CONF_TRANSACTION_LOOKBACK_DAYS: 90,
@@ -232,7 +237,25 @@ async def test_options_flow_defaults_to_ten_transactions(
     result = await hass.config_entries.options.async_init(entry.entry_id)
     defaults = result["data_schema"]({})
 
+    assert defaults[CONF_CONSENT_DAYS] == 90
     assert defaults[CONF_TRANSACTION_COUNT] == 10
+
+
+async def test_options_flow_preserves_original_consent_days(
+    hass: HomeAssistant,
+) -> None:
+    """Existing entries use their setup value until an option is saved."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_CONSENT_DAYS: 120},
+        options={},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    defaults = result["data_schema"]({})
+
+    assert defaults[CONF_CONSENT_DAYS] == 120
 
 
 async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
@@ -249,6 +272,7 @@ async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
             CONF_CONSENT_DAYS: 90,
             CONF_SESSION_ID: "old-session-id",
         },
+        options={CONF_CONSENT_DAYS: 120},
     )
     entry.add_to_hass(hass)
 
@@ -262,7 +286,9 @@ async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
             "async_get_clientsession",
             return_value=MagicMock(),
         ),
+        patch("custom_components.enable_banking.config_flow.datetime") as clock,
     ):
+        clock.now.return_value = datetime(2026, 11, 14, 12, 0, tzinfo=UTC)
         result = await hass.config_entries.flow.async_init(
             DOMAIN,
             context={
@@ -273,16 +299,20 @@ async def test_reconfigure_starts_consent_renewal(hass: HomeAssistant) -> None:
         assert result["type"] is data_entry_flow.FlowResultType.FORM
         assert result["step_id"] == "reconfigure"
 
+        start_authorization = AsyncMock(return_value="https://bank.example/authorize")
         with patch(
             "custom_components.enable_banking.config_flow.EnableBankingApi."
             "async_start_authorization",
-            new=AsyncMock(return_value="https://bank.example/authorize"),
+            new=start_authorization,
         ):
             result = await hass.config_entries.flow.async_configure(
                 result["flow_id"], user_input={}
             )
 
         assert result["type"] is data_entry_flow.FlowResultType.EXTERNAL_STEP
+        assert start_authorization.await_args.kwargs["valid_until"] == datetime(
+            2026, 11, 14, 12, 0, tzinfo=UTC
+        ) + timedelta(days=120)
         state = next(iter(hass.data[DOMAIN][DATA_PENDING_FLOWS]))
         with patch(
             "custom_components.enable_banking.config_flow.EnableBankingApi."

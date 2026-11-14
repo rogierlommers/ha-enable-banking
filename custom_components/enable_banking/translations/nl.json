@@ -66,8 +66,9 @@
     "step": {
       "init": {
         "title": "Opties voor Enable Banking",
-        "description": "Kies hoe vaak rekeninggegevens worden vernieuwd, hoeveel recente transacties per rekening worden getoond en hoe ver er wordt teruggekeken. Stel recente transacties in op 0 om het ophalen van transacties uit te schakelen. Transactieoverzichten worden opgeslagen in sensorattributen, kunnen door de recorder van Home Assistant worden bewaard en kunnen worden gelezen door geauthenticeerde Home Assistant-gebruikers met toegang tot entiteitsstatussen. Het verbergen van een dashboardkaart is geen toegangsbeveiliging.",
+        "description": "Kies de duur die bij de volgende bankautorisatie wordt aangevraagd, hoe vaak rekeninggegevens worden vernieuwd, hoeveel recente transacties per rekening worden getoond en hoe ver er wordt teruggekeken. Het wijzigen van de aangevraagde duur verlengt de huidige autorisatie niet; vernieuw de banktoestemming om de wijziging toe te passen. Stel recente transacties in op 0 om het ophalen van transacties uit te schakelen. Transactieoverzichten worden opgeslagen in sensorattributen, kunnen door de recorder van Home Assistant worden bewaard en kunnen worden gelezen door geauthenticeerde Home Assistant-gebruikers met toegang tot entiteitsstatussen. Het verbergen van een dashboardkaart is geen toegangsbeveiliging.",
         "data": {
+          "consent_days": "Gewenste geldigheid van authenticatie (dagen)",
           "refresh_interval": "Vernieuwingsinterval (minuten)",
           "transaction_count": "Recente transacties per rekening",
           "transaction_lookback_days": "Terugkijkperiode voor transacties (dagen)"
@@ -93,6 +94,9 @@
       },
       "last_refresh": {
         "name": "Laatst vernieuwd"
+      },
+      "authentication_expires_in": {
+        "name": "Authenticatie verloopt over"
       }
     }
   }

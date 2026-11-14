@@ -65,6 +65,15 @@ For consent expiry, raise `ConfigEntryAuthFailed` from a coordinator associated
 with its config entry. Home Assistant then starts the integration's reauth flow
 both during initial setup and after a later polling failure.
 
+Keep the requested consent duration separate from the expiry the bank actually
+grants. Store the request as an option for the next authorization; changing it
+cannot extend an active session. During each coordinator refresh, read
+`access.valid_until` from the session response and use that provider timestamp
+for status reporting. If the timestamp is absent or invalid, leave the expiry
+sensor unavailable rather than estimating from the requested duration. For a
+days-remaining sensor, round a partial final day up so it does not report zero
+while authorization is still valid.
+
 ## Why This Matters
 
 The public callback cannot require an authenticated Home Assistant browser
@@ -91,7 +100,9 @@ The implementation is split across:
 - `custom_components/enable_banking/api.py` for application JWT signing and
   session creation;
 - `custom_components/enable_banking/config_flow.py` for state generation,
-  external-step transitions, and reauthentication; and
+  external-step transitions, and reauthentication;
+- `custom_components/enable_banking/coordinator.py` and `sensor.py` for the
+  provider-reported session expiry and days-remaining sensor; and
 - `custom_components/enable_banking/__init__.py` for the public one-time
   callback endpoint.
 

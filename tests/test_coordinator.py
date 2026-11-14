@@ -149,7 +149,11 @@ async def test_transaction_failure_keeps_balance_update_available(
     entry.add_to_hass(hass)
     api = MagicMock()
     api.async_get_session = AsyncMock(
-        return_value={"status": "AUTHORIZED", "accounts": ["account-id"]}
+        return_value={
+            "status": "AUTHORIZED",
+            "accounts": ["account-id"],
+            "access": {"valid_until": "2027-01-01T01:59:59+02:00"},
+        }
     )
     api.async_get_account_details = AsyncMock(
         return_value={
@@ -177,12 +181,113 @@ async def test_transaction_failure_keeps_balance_update_available(
 
     assert coordinator.last_update_success is True
     assert coordinator.last_refresh == datetime(2026, 10, 10, tzinfo=UTC)
+    assert coordinator.session_valid_until == datetime(
+        2026, 12, 31, 23, 59, 59, tzinfo=UTC
+    )
     account = next(iter(coordinator.data.values()))
     assert account.amount.is_finite()
     assert account.transactions is None
     assert api.async_get_transactions.await_args.kwargs["date_from"].isoformat() == (
         "2026-07-12"
     )
+
+
+async def test_invalid_session_expiry_does_not_break_balance_updates(
+    hass: HomeAssistant,
+) -> None:
+    """Malformed optional expiry data leaves only the expiry sensor unavailable."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+        options={CONF_TRANSACTION_COUNT: 0},
+    )
+    entry.add_to_hass(hass)
+    api = MagicMock()
+    api.async_get_session = AsyncMock(
+        return_value={
+            "status": "AUTHORIZED",
+            "accounts": ["account-id"],
+            "access": {"valid_until": "not-a-date"},
+        }
+    )
+    api.async_get_account_details = AsyncMock(
+        return_value={
+            "identification_hash": "provider-account-hash",
+            "name": "Current account",
+            "currency": "EUR",
+        }
+    )
+    api.async_get_balances = AsyncMock(
+        return_value=[
+            {
+                "balance_type": "ITAV",
+                "balance_amount": {"amount": "123.45", "currency": "EUR"},
+            }
+        ]
+    )
+    coordinator = EnableBankingCoordinator(hass, entry, api)
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is True
+    assert coordinator.session_valid_until is None
+    assert len(coordinator.data) == 1
+
+
+async def test_failed_refresh_preserves_last_known_session_expiry(
+    hass: HomeAssistant,
+) -> None:
+    """Transient account failures do not erase accepted session metadata."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+        options={CONF_TRANSACTION_COUNT: 0},
+    )
+    entry.add_to_hass(hass)
+    api = MagicMock()
+    api.async_get_session = AsyncMock(
+        return_value={
+            "status": "AUTHORIZED",
+            "accounts": ["account-id"],
+            "access": {"valid_until": "not-a-date"},
+        }
+    )
+    api.async_get_account_details = AsyncMock(
+        side_effect=EnableBankingError("Account unavailable")
+    )
+    coordinator = EnableBankingCoordinator(hass, entry, api)
+    previous_expiry = datetime(2026, 12, 31, tzinfo=UTC)
+    coordinator.session_valid_until = previous_expiry
+
+    await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is False
+    assert coordinator.session_valid_until == previous_expiry
+
+
+async def test_unauthorized_session_clears_last_known_expiry(
+    hass: HomeAssistant,
+) -> None:
+    """A session requiring reauthentication no longer reports future validity."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_SESSION_ID: "session-id", CONF_ASPSP_NAME: "Example Bank"},
+        options={CONF_TRANSACTION_COUNT: 0},
+    )
+    entry.add_to_hass(hass)
+    api = MagicMock()
+    api.async_get_session = AsyncMock(return_value={"status": "EXPIRED"})
+    coordinator = EnableBankingCoordinator(hass, entry, api)
+    coordinator.session_valid_until = datetime(2026, 12, 31, tzinfo=UTC)
+
+    with patch.object(
+        entry, "async_start_reauth_if_available"
+    ) as start_reauth_if_available:
+        await coordinator.async_refresh()
+
+    assert coordinator.last_update_success is False
+    assert coordinator.session_valid_until is None
+    start_reauth_if_available.assert_called_once_with(hass)
 
 
 async def test_one_account_failure_keeps_other_balance_available(
@@ -246,11 +351,13 @@ async def test_application_auth_failure_records_credential_reauth_reason(
     )
     coordinator = EnableBankingCoordinator(hass, entry, api)
 
-    with patch.object(entry, "async_start_reauth") as start_reauth:
+    with patch.object(
+        entry, "async_start_reauth_if_available"
+    ) as start_reauth_if_available:
         await coordinator.async_refresh()
 
     assert coordinator.last_update_success is False
-    start_reauth.assert_called_once()
+    start_reauth_if_available.assert_called_once_with(hass)
     assert hass.data[DOMAIN][DATA_REAUTH_REASONS][entry.entry_id] == (
         REAUTH_REASON_APPLICATION
     )

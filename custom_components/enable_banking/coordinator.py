@@ -14,6 +14,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .api import (
     EnableBankingApi,
@@ -123,7 +124,7 @@ def normalize_transaction(transaction: dict[str, Any]) -> TransactionSummary | N
     currency_value = amount_data.get("currency")
     try:
         amount = Decimal(str(amount_value))
-    except (InvalidOperation, TypeError):
+    except InvalidOperation, TypeError:
         return None
     if (
         not amount.is_finite()
@@ -221,6 +222,7 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
             else DEFAULT_TRANSACTION_LOOKBACK_DAYS
         )
         self.last_refresh: datetime | None = None
+        self.session_valid_until: datetime | None = None
         self._account_details: dict[str, dict[str, Any]] = {}
 
     async def _async_get_account_balance(
@@ -301,7 +303,24 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
                 self.config_entry.data[CONF_SESSION_ID]
             )
             if session.get("status") != "AUTHORIZED":
+                self.session_valid_until = None
                 raise ConfigEntryAuthFailed("Bank authorization must be renewed")
+
+            access = session.get("access")
+            valid_until = (
+                access.get("valid_until") if isinstance(access, dict) else None
+            )
+            parsed_valid_until = (
+                dt_util.parse_datetime(valid_until)
+                if isinstance(valid_until, str)
+                else None
+            )
+            session_valid_until = (
+                dt_util.as_utc(parsed_valid_until)
+                if parsed_valid_until is not None
+                and parsed_valid_until.tzinfo is not None
+                else None
+            )
 
             account_ids = session.get("accounts", [])
             if not isinstance(account_ids, list):
@@ -341,14 +360,17 @@ class EnableBankingCoordinator(DataUpdateCoordinator[dict[str, AccountBalance]])
                     result[outcome.stable_id] = outcome
             if failures and not result:
                 raise UpdateFailed("Unable to update any bank account")
+            self.session_valid_until = session_valid_until
             self.last_refresh = datetime.now(tz=UTC)
             return result
         except EnableBankingApplicationAuthError as err:
+            self.session_valid_until = None
             self.hass.data.setdefault(DOMAIN, {}).setdefault(DATA_REAUTH_REASONS, {})[
                 self.config_entry.entry_id
             ] = REAUTH_REASON_APPLICATION
             raise ConfigEntryAuthFailed from err
         except EnableBankingAuthError as err:
+            self.session_valid_until = None
             raise ConfigEntryAuthFailed from err
         except EnableBankingError as err:
             raise UpdateFailed(str(err)) from err
