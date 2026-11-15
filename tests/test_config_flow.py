@@ -7,6 +7,10 @@ from homeassistant import config_entries, data_entry_flow
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.enable_banking.api import (
+    EnableBankingConnectionError,
+    EnableBankingError,
+)
 from custom_components.enable_banking.const import (
     CONF_APPLICATION_ID,
     CONF_ASPSP_NAME,
@@ -184,6 +188,129 @@ async def test_bank_rejects_unsupported_customer_type(hass: HomeAssistant) -> No
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "bank"
     assert result["errors"] == {CONF_PSU_TYPE: "unsupported_psu_type"}
+
+
+async def test_authorization_abort_shows_provider_error(hass: HomeAssistant) -> None:
+    """A rejected authorization request shows the provider's diagnostic."""
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_validate_application",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_get_aspsps",
+            new=AsyncMock(return_value=[{"name": "Example Bank"}]),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_APPLICATION_ID: "application-id",
+                CONF_PRIVATE_KEY: "private-key",
+                CONF_COUNTRY: "NL",
+            },
+        )
+        with patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_start_authorization",
+            new=AsyncMock(
+                side_effect=EnableBankingError(
+                    "Enable Banking request failed (422): "
+                    "Must not exceed maximum consent validity"
+                )
+            ),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={
+                    CONF_ASPSP_NAME: "Example Bank",
+                    CONF_PSU_TYPE: "personal",
+                    CONF_CONSENT_DAYS: 365,
+                },
+            )
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "api_error"
+    assert result["description_placeholders"] == {
+        "error_detail": (
+            "Enable Banking request failed (422): "
+            "Must not exceed maximum consent validity"
+        )
+    }
+
+
+async def test_authorization_transport_failure_remains_generic(
+    hass: HomeAssistant,
+) -> None:
+    """A transport failure does not expose provider diagnostics."""
+    with (
+        patch(
+            "custom_components.enable_banking.config_flow.get_url",
+            return_value="https://ha.example",
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.aiohttp_client."
+            "async_get_clientsession",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_validate_application",
+            new=AsyncMock(),
+        ),
+        patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_get_aspsps",
+            new=AsyncMock(return_value=[{"name": "Example Bank"}]),
+        ),
+    ):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={
+                CONF_APPLICATION_ID: "application-id",
+                CONF_PRIVATE_KEY: "private-key",
+                CONF_COUNTRY: "NL",
+            },
+        )
+        with patch(
+            "custom_components.enable_banking.config_flow.EnableBankingApi."
+            "async_start_authorization",
+            new=AsyncMock(
+                side_effect=EnableBankingConnectionError(
+                    "Unable to connect to Enable Banking"
+                )
+            ),
+        ):
+            result = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                user_input={
+                    CONF_ASPSP_NAME: "Example Bank",
+                    CONF_PSU_TYPE: "personal",
+                    CONF_CONSENT_DAYS: 365,
+                },
+            )
+
+    assert result["type"] is data_entry_flow.FlowResultType.ABORT
+    assert result["reason"] == "cannot_connect"
+    assert result.get("description_placeholders") is None
+    assert hass.data[DOMAIN][DATA_PENDING_FLOWS] == {}
 
 
 async def test_options_flow_updates_polling_and_transaction_count(

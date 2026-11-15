@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
+from contextlib import suppress
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
@@ -14,6 +15,7 @@ from .const import API_BASE_URL, MAX_TRANSACTION_PAGES
 
 _APPLICATION_AUTH_ERROR_STATUSES = frozenset({401, 403})
 _SESSION_AUTH_ERROR_STATUSES = frozenset({404})
+_MAX_PROVIDER_ERROR_LENGTH = 500
 
 
 class EnableBankingError(Exception):
@@ -34,6 +36,53 @@ class EnableBankingSessionAuthError(EnableBankingAuthError):
 
 class EnableBankingConnectionError(EnableBankingError):
     """Raised when the API cannot be reached."""
+
+
+def _provider_error_detail(payload: Any) -> str | None:
+    """Extract bounded human-readable diagnostics from an API error response."""
+    if not isinstance(payload, Mapping):
+        return None
+
+    messages: list[str] = []
+
+    def collect(value: Any, depth: int = 0) -> None:
+        if len(messages) >= 3 or depth > 3:
+            return
+        if isinstance(value, str):
+            normalized = " ".join(value.split())
+            if normalized and normalized not in messages:
+                messages.append(normalized)
+            return
+        if isinstance(value, Mapping):
+            for key in ("message", "msg", "detail"):
+                collect(value.get(key), depth + 1)
+            return
+        if isinstance(value, list):
+            for item in value:
+                collect(item, depth + 1)
+
+    collect(payload.get("message"))
+    collect(payload.get("detail"))
+    if not messages:
+        collect(payload.get("error"))
+    if not messages:
+        return None
+
+    detail = "; ".join(messages)
+    if len(detail) <= _MAX_PROVIDER_ERROR_LENGTH:
+        return detail
+    return f"{detail[: _MAX_PROVIDER_ERROR_LENGTH - 1].rstrip()}…"
+
+
+async def _response_error_detail(
+    response: aiohttp.ClientResponse, *, include: bool
+) -> str | None:
+    """Read a provider diagnostic when the caller can safely display it."""
+    if not include or response.status < 400:
+        return None
+    with suppress(aiohttp.ContentTypeError, ValueError):
+        return _provider_error_detail(await response.json())
+    return None
 
 
 class EnableBankingApi:
@@ -72,6 +121,7 @@ class EnableBankingApi:
         params: Mapping[str, str] | None = None,
         json: Mapping[str, Any] | None = None,
         session_error_statuses: frozenset[int] = frozenset(),
+        include_error_detail: bool = False,
     ) -> dict[str, Any]:
         try:
             token = await asyncio.to_thread(self._create_token)
@@ -92,18 +142,28 @@ class EnableBankingApi:
                 },
                 timeout=aiohttp.ClientTimeout(total=30),
             ) as response:
+                error_detail = await _response_error_detail(
+                    response, include=include_error_detail
+                )
                 if response.status in _APPLICATION_AUTH_ERROR_STATUSES:
-                    raise EnableBankingApplicationAuthError(
+                    message = (
                         f"Enable Banking rejected authorization ({response.status})"
                     )
+                    if error_detail:
+                        message = f"{message}: {error_detail}"
+                    raise EnableBankingApplicationAuthError(message)
                 if response.status in session_error_statuses:
-                    raise EnableBankingSessionAuthError(
+                    message = (
                         f"Enable Banking session is unavailable ({response.status})"
                     )
+                    if error_detail:
+                        message = f"{message}: {error_detail}"
+                    raise EnableBankingSessionAuthError(message)
                 if response.status >= 400:
-                    raise EnableBankingError(
-                        f"Enable Banking request failed ({response.status})"
-                    )
+                    message = f"Enable Banking request failed ({response.status})"
+                    if error_detail:
+                        message = f"{message}: {error_detail}"
+                    raise EnableBankingError(message)
                 try:
                     payload = await response.json()
                 except (aiohttp.ContentTypeError, ValueError) as err:
@@ -161,6 +221,7 @@ class EnableBankingApi:
                 "redirect_url": redirect_url,
                 "psu_type": psu_type,
             },
+            include_error_detail=True,
         )
         url = payload.get("url")
         if not isinstance(url, str) or not url.startswith("https://"):

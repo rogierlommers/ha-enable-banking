@@ -228,6 +228,54 @@ async def test_server_error_is_generic_api_error() -> None:
         await api.async_validate_application()
 
 
+async def test_authorization_error_includes_provider_message_and_detail() -> None:
+    """Authorization diagnostics are retained without exposing the raw response."""
+    api, response = _api_with_response_status(422)
+    response.json.return_value = {
+        "message": "Invalid authorization request",
+        "detail": [
+            {
+                "loc": ["body", "access", "valid_until"],
+                "msg": "Must not exceed maximum consent validity",
+                "input": "sensitive-value-that-must-not-be-shown",
+            }
+        ],
+    }
+
+    with (
+        patch.object(api, "_create_token", return_value="signed-token"),
+        pytest.raises(EnableBankingError) as error,
+    ):
+        await api.async_start_authorization(
+            country="NL",
+            aspsp_name="Example Bank",
+            psu_type="personal",
+            valid_until=datetime(2027, 1, 1, tzinfo=UTC),
+            state="state",
+            redirect_url="https://ha.example/api/enable_banking/callback",
+        )
+
+    assert str(error.value) == (
+        "Enable Banking request failed (422): Invalid authorization request; "
+        "Must not exceed maximum consent validity"
+    )
+    assert "sensitive-value" not in str(error.value)
+
+
+async def test_non_authorization_error_omits_provider_detail() -> None:
+    """Routine API failures do not persist provider diagnostics in logs."""
+    api, response = _api_with_response_status(422)
+    response.json.return_value = {"message": "Sensitive provider detail"}
+
+    with (
+        patch.object(api, "_create_token", return_value="signed-token"),
+        pytest.raises(
+            EnableBankingError, match=r"^Enable Banking request failed \(422\)$"
+        ),
+    ):
+        await api.async_validate_application()
+
+
 async def test_timeout_is_connection_error() -> None:
     """HTTP timeouts use the coordinator's recoverable connection path."""
     session = MagicMock()

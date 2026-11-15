@@ -254,9 +254,18 @@ class EnableBankingConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 state=self._state,
                 redirect_url=self._callback_url(),
             )
-        except EnableBankingError, NoURLAvailableError:
+        except EnableBankingConnectionError:
             async_remove_pending_flow(self.hass, self._state)
             return self.async_abort(reason="cannot_connect")
+        except EnableBankingError as err:
+            async_remove_pending_flow(self.hass, self._state)
+            return self.async_abort(
+                reason="api_error",
+                description_placeholders={"error_detail": str(err)},
+            )
+        except NoURLAvailableError:
+            async_remove_pending_flow(self.hass, self._state)
+            return self.async_abort(reason="external_url_missing")
         return self.async_external_step(step_id="authorize", url=authorization_url)
 
     def _async_external_error(self, reason: str) -> ConfigFlowResult:

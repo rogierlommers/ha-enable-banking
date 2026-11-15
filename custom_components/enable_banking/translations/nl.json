@@ -51,6 +51,7 @@
     "abort": {
       "access_denied": "De bankautorisatie is geannuleerd of geweigerd",
       "already_configured": "Deze bankverbinding is al geconfigureerd",
+      "api_error": "Enable Banking heeft een fout geretourneerd: {error_detail}",
       "cannot_connect": "Kan geen verbinding maken met Enable Banking",
       "external_url_missing": "Configureer eerst een openbare externe HTTPS-URL in Home Assistant",
       "invalid_auth": "Enable Banking heeft de autorisatie geweigerd",
