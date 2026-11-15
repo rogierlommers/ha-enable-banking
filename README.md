@@ -61,6 +61,10 @@ Now add the Enable Banking integration in Home Assistant and enter:
 | **Customer type** | `Personal` for a private account or `Business` for a business account. |
 | **Requested consent duration** | The number of days to request access, for example `90`. |
 
+Banks can impose their own maximum consent duration. If Enable Banking rejects
+the authorization request—for example because the requested duration is too
+long—the setup flow shows the bounded diagnostic returned by Enable Banking.
+
 ## Entities, refresh options, and history
 
 Each account is represented as a Home Assistant device with one **Balance** sensor. The sensor:

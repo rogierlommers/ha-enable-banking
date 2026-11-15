@@ -1,7 +1,7 @@
 ---
 title: Treat Enable Banking consent as an external config-flow step
 date: 2026-10-10
-last_updated: 2026-10-10
+last_updated: 2026-11-15
 category: architecture-patterns
 module: Enable Banking authorization
 problem_type: architecture_pattern
@@ -73,6 +73,20 @@ for status reporting. If the timestamp is absent or invalid, leave the expiry
 sensor unavailable rather than estimating from the requested duration. For a
 days-remaining sensor, round a partial final day up so it does not report zero
 while authorization is still valid.
+
+Authorization initiation can also fail before the browser redirect. Banks
+advertise a provider-specific maximum consent validity, so a duration accepted
+by the integration's global selector can still be rejected by `POST /auth`.
+Do not collapse that API rejection into a network-style `cannot_connect` error.
+Preserve the HTTP status and the documented human-readable `message` and
+`detail` fields in the API exception, then pass the exception text to a
+translated config-flow abort through `description_placeholders`.
+
+Treat provider diagnostics as untrusted display data. Extract only recognized
+message fields rather than rendering the raw response, normalize whitespace,
+limit nesting and message count, and cap the final text. A regression test
+should include an unrelated response value and prove that it is not exposed.
+Keep timeouts and transport failures on the generic connection-error path.
 
 ## Why This Matters
 

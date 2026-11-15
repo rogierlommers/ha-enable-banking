@@ -51,6 +51,7 @@
     "abort": {
       "access_denied": "Bank authorization was cancelled or denied",
       "already_configured": "This bank connection is already configured",
+      "api_error": "Enable Banking returned an error: {error_detail}",
       "cannot_connect": "Unable to connect to Enable Banking",
       "external_url_missing": "Configure a public HTTPS external URL in Home Assistant first",
       "invalid_auth": "Enable Banking rejected the authorization",
